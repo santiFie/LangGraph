@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - bot_data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  mcp:
+    build: ./mcp
+    ports:
+      - "8001:8001"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+
+volumes:
+  bot_data:
