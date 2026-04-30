@@ -3,7 +3,7 @@ from mcp.server.fastmcp import FastMCP
 import os
 
 # Create an MCP server
-mcp = FastMCP("Bots MCP Server")
+mcp = FastMCP("Bots MCP Server", host="0.0.0.0", port=8001)
 
 API_URL = os.environ.get("API_URL", "http://api:8000")
 
