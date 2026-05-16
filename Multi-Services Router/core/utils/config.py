@@ -36,7 +36,7 @@ class Config:
     TAVILY_MAX_RESULTS: int = 3
     
     # RAG Configuration
-    RAG_PDF_PATH: str = os.getenv("RAG_PDF_PATH", "./RAG PDFs")
+    RAG_PDF_PATH: str = os.getenv("RAG_PDF_PATH", "./rag_pdfs")
     CHUNK_SIZE: int = 1500
     CHUNK_OVERLAP: int = 200
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -58,7 +58,8 @@ class Config:
     WORKSPACE_PATH: str = os.getenv("WORKSPACE_PATH", "/home/santi/Documentos/LangGraph/")
     
     # Bots MCP
-    BOTS_API_URL: str = os.getenv("BOTS_API_URL", "http://localhost:8001/sse")
+    BOTS_API_URL: str = os.getenv("BOTS_API_URL", "http://localhost:8001")
+    BOTS_MCP_URL: str = os.getenv("BOTS_MCP_URL", "http://localhost:8001/sse")
     
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")

@@ -17,7 +17,7 @@ def check_environment():
     checks = {
         "Python 3.11+": sys.version_info >= (3, 11),
         ".env file": Path(".env").exists(),
-        "RAG PDFs directory": Path("RAG PDFs").exists(),
+        "rag_pdfs directory": Path("rag_pdfs").exists(),
         "Requirements installed": Path("venv" if os.name != 'nt' else "venv\\Scripts").exists() or check_imports(),
     }
     
@@ -61,8 +61,8 @@ def check_api_keys():
         "GEMINI_API_KEY": "Google Gemini",
         "GROQ_API_KEY": "Groq",
         "TAVILY_API_KEY": "Tavily Search",
-        "OPENAI_API_KEY": "OpenAI (optional)",
         "GITHUB_PERSONAL_ACCESS_TOKEN": "GitHub (optional)",
+        "BOTS_MCP_URL": "Bots MCP (optional)",
     }
     
     for env_var, service in keys_needed.items():
@@ -85,7 +85,7 @@ def show_quick_start():
     print("   Visit: http://localhost:8000/docs")
     
     print("\n2️⃣  Docker Deployment:")
-    print("   $ docker-compose up --build")
+    print("   $ make up")
     print("   Visit: http://localhost:8000/docs")
     
     print("\n3️⃣  API Usage Example:")
@@ -107,12 +107,12 @@ def show_troubleshooting():
     print("=" * 50)
     
     print("\n❓ PDF files not loaded in RAG?")
-    print("   - Ensure PDFs are in 'RAG PDFs' directory")
+    print("   - Ensure PDFs are in 'rag_pdfs' directory")
     print("   - Supported formats: PDF")
     
     print("\n❓ MCP server connection failed?")
-    print("   - Check Bots API is running on port 8001")
-    print("   - Verify BOTS_API_URL in .env")
+    print("   - Check Bots MCP is running on port 8001")
+    print("   - Verify BOTS_MCP_URL in .env")
     
     print("\n❓ Database locked error?")
     print("   - Only one process can access checkpoint.db")

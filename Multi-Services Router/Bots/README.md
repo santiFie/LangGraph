@@ -35,7 +35,7 @@ The MCP Server provides the following tools:
 1. Ensure you have Docker and Docker Compose installed.
 2. Run the application:
    ```bash
-   docker-compose up --build
+   docker compose up --build
    ```
 3. Access the API Docs at `http://localhost:8000/docs`.
 4. Connect your LangGraph agent or MCP Client to the SSE MCP server at `http://localhost:8001/sse`.

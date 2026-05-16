@@ -46,7 +46,7 @@ pip install -r requirements.txt
 # Create directories
 echo ""
 echo "📁 Creating necessary directories..."
-mkdir -p "RAG PDFs"
+mkdir -p "rag_pdfs"
 mkdir -p checkpoint_data
 mkdir -p logs
 
@@ -78,7 +78,7 @@ echo "✅ Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Edit .env with your API keys"
-echo "2. Add PDF files to 'RAG PDFs' directory"
+echo "2. Add PDF files to 'rag_pdfs' directory"
 echo "3. Run: python main.py"
 echo ""
 echo "For Docker deployment:"

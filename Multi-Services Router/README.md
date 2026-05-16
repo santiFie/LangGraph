@@ -20,6 +20,7 @@ A production-ready, intelligent service router built with LangGraph, LangServe, 
 
 - Python 3.11+
 - Docker & Docker Compose (for containerized deployment)
+- GNU Make
 - Node.js 18+ (for MCP servers)
 - API Keys:
   - OpenAI (for supervisor model)
@@ -57,8 +58,8 @@ nano .env
 
 5. **Prepare PDFs for RAG**
 ```bash
-# Place your PDF files in the RAG PDFs directory
-mkdir -p "RAG PDFs"
+# Place your PDF files in the rag_pdfs directory
+mkdir -p "rag_pdfs"
 # Copy your PDFs here
 ```
 
@@ -84,19 +85,19 @@ nano .env
 
 2. **Prepare PDFs**
 ```bash
-mkdir -p "RAG PDFs"
+mkdir -p "rag_pdfs"
 # Copy your PDFs here
 ```
 
 3. **Build and run**
 ```bash
-docker-compose up --build
+make up
 ```
 
 4. **Access services**
 - **API**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
-- **Bots API**: http://localhost:8001
+- **Bots MCP**: http://localhost:8001/sse
 
 ## 📖 API Usage
 
@@ -171,7 +172,7 @@ Multi-Services Router/
 ├── .env.example                     # Environment template
 ├── langgraph.json                   # LangGraph Studio config
 ├── checkpoint.db                    # Persistent state database
-├── RAG PDFs/                        # PDF knowledge base
+├── rag_pdfs/                        # PDF knowledge base
 ├── core/
 │   ├── __init__.py
 │   ├── graph.py                     # Supervisor graph
@@ -201,7 +202,7 @@ Essential variables in `.env`:
 # LLM Providers
 GEMINI_API_KEY=your_key
 GROQ_API_KEY=your_key
-OPENAI_API_KEY=your_key
+NVIDIA_API_KEY=your_key
 
 # Search
 TAVILY_API_KEY=your_key
@@ -211,7 +212,7 @@ GITHUB_PERSONAL_ACCESS_TOKEN=your_token
 
 # Paths
 WORKSPACE_PATH=/path/to/workspace
-RAG_PDF_PATH=./RAG PDFs
+RAG_PDF_PATH=./rag_pdfs
 
 # Server
 SERVER_HOST=0.0.0.0
@@ -313,7 +314,7 @@ pytest --cov=core tests/
 ```
 Error: Failed to connect to MCP server
 ```
-**Solution**: Ensure Bots API is running and accessible at `BOTS_API_URL`
+**Solution**: Ensure Bots MCP is running and accessible at `BOTS_MCP_URL` (`http://localhost:8001/sse`)
 
 ### Database Lock Error
 ```
@@ -323,12 +324,12 @@ Error: database is locked
 
 ### PDF Not Found in RAG
 ```
-FileNotFoundError: No PDF files found in ./RAG PDFs/*.pdf
+FileNotFoundError: No PDF files found in ./rag_pdfs/*.pdf
 ```
-**Solution**: Create `RAG PDFs` directory and add PDF files:
+**Solution**: Create `rag_pdfs` directory and add PDF files:
 ```bash
-mkdir -p "RAG PDFs"
-cp your_pdfs.pdf "RAG PDFs"/
+mkdir -p "rag_pdfs"
+cp your_pdfs.pdf "rag_pdfs"/
 ```
 
 ### Memory Issues with Large PDFs

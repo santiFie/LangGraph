@@ -7,9 +7,9 @@ from glob import glob
 
 def generate_retriever():
     # Expand glob pattern to actual file paths and load each PDF separately
-    pdf_paths = glob("./RAG PDFs/*.pdf")
+    pdf_paths = glob("./rag_pdfs/*.pdf")
     if not pdf_paths:
-        raise FileNotFoundError("No PDF files found in ./RAG PDFs/*.pdf")
+        raise FileNotFoundError("No PDF files found in ./rag_pdfs/*.pdf")
 
     all_docs = []
     for path in pdf_paths:

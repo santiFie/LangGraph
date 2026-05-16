@@ -41,7 +41,7 @@ async def create_supervisor_graph(persistence_saver):
     bots_client = MultiServerMCPClient(
         {
             "BotsAgent": {
-                "url": config.BOTS_API_URL,
+                "url": config.BOTS_MCP_URL,
                 "transport": "sse"
             }
         }
