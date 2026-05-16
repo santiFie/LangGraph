@@ -1,0 +1,111 @@
+services:
+  # LangServe Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi-services-router
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LANGCHAIN_TRACING_V2=${LANGCHAIN_TRACING_V2:-false}
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT:-Multi-Services-Router}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_PERSONAL_ACCESS_TOKEN}
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - CHECKPOINT_DB=/app/checkpoints/checkpoint.db
+      - WORKSPACE_PATH=/app/workspace
+    volumes:
+      - ./RAG PDFs:/app/RAG PDFs
+      - ./workspace:/app/workspace
+      - checkpoint_data:/app/checkpoints
+    networks:
+      - router-network
+    depends_on:
+      - bots-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Bots API (MCP Server)
+  bots-api:
+    build:
+      context: ./Bots/api
+      dockerfile: Dockerfile
+    container_name: bots-api
+    ports:
+      - "8001:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/data/bots.db
+    volumes:
+      - bot_data:/app/data
+    networks:
+      - router-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  bots-mcp:
+    build:
+      context: ./Bots/mcp
+      dockerfile: Dockerfile
+    container_name: bots-mcp
+    ports:
+      - "8002:8000"
+    environment:
+      - API_URL=http://api:8000
+    networks:
+      - router-network
+    depends_on:
+      - bots-api
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # LangGraph Studio
+  # studio:
+  #   image: langchain/langgraph-studio:latest
+  #   container_name: langgraph-studio
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - LANGGRAPH_API_URL=http://app:8000
+  #   networks:
+  #     - router-network
+  #   depends_on:
+  #     - app
+  #   restart: unless-stopped
+
+networks:
+  router-network:
+    driver: bridge
+
+volumes:
+  checkpoint_data:
+  rag_pdfs:
+  bot_data:

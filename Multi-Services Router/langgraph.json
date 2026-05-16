@@ -1,0 +1,30 @@
+"""
+Multi-Services Router LangGraph Configuration
+For LangGraph Studio support
+"""
+
+{
+  "graphs": {
+    "supervisor": {
+      "nodes": {
+        "supervisor": {
+          "path": "core.graph:create_supervisor_graph",
+          "subgraphs": [
+            "searcher",
+            "bots",
+            "github"
+          ]
+        },
+        "searcher": {
+          "path": "core.agent.researcher:build_searcher_graph"
+        },
+        "bots": {
+          "path": "core.agent.bots_agent:build_bots_workflow"
+        },
+        "github": {
+          "path": "core.agent.github_agent:build_github_workflow"
+        }
+      }
+    }
+  }
+}
