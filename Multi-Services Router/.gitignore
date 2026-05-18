@@ -76,9 +76,9 @@ build/
 .DS_Store
 Thumbs.db
 
-# RAG PDFs (local development)
-RAG PDFs/*.pdf
-!RAG PDFs/.gitkeep
+# rag_pdfs (local development)
+rag_pdfs/*.pdf
+!rag_pdfs/.gitkeep
 
 # Temporary files
 *.tmp
