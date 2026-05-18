@@ -58,8 +58,12 @@ class Config:
     WORKSPACE_PATH: str = os.getenv("WORKSPACE_PATH", "/home/santi/Documentos/LangGraph/")
     
     # Bots MCP
-    BOTS_API_URL: str = os.getenv("BOTS_API_URL", "http://localhost:8001")
-    BOTS_MCP_URL: str = os.getenv("BOTS_MCP_URL", "http://localhost:8001/sse")
+    BOTS_MCP_URL: str = (
+        os.getenv("BOTS_MCP_URL")
+        or os.getenv("MCP_SERVER_URL")
+        or os.getenv("BOTS_API_URL")
+        or "http://mcp:8001/sse"
+    )
     
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")
@@ -70,10 +74,6 @@ class Config:
     SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
     SERVER_RELOAD: bool = DEBUG
     
-    # ==================== LANGSERVE ====================
-    LANGSERVE_ENABLE_DOCS: bool = os.getenv("LANGSERVE_ENABLE_DOCS", "true").lower() == "true"
-    LANGSERVE_ENABLE_PLAYGROUND: bool = os.getenv("LANGSERVE_ENABLE_PLAYGROUND", "true").lower() == "true"
-    
     # ==================== LOGGING ====================
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO" if not DEBUG else "DEBUG")
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -81,11 +81,12 @@ class Config:
     # ==================== AGENTS ====================
     SEARCHER_MODEL: str = os.getenv("SEARCHER_MODEL", "llama-3.3-70b-versatile")
     GITHUB_MODEL: str = os.getenv("GITHUB_MODEL", "gemini-3.1-flash-lite-preview")
-    SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "gpt-4")
+    SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "z-ai/glm-5.1")
+    BOTS_MODEL: str = os.getenv("BOTS_MODEL", "llama-3.3-70b-versatile")
     
     @classmethod
     def validate(cls) -> bool:
-        """Valida que las variables de entorno críticas estén configuradas"""
+        """Validate required configuration and API keys"""
         required_keys = [
             "GEMINI_API_KEY",
             "GROQ_API_KEY",
@@ -95,14 +96,14 @@ class Config:
         missing = [key for key in required_keys if not getattr(cls, key)]
         
         if missing:
-            print(f"⚠️  Advertencia: Variables de entorno faltantes: {', '.join(missing)}")
+            print(f"Error: Environment variables missing: {', '.join(missing)}")
             return False
         
         return True
     
     @classmethod
     def to_dict(cls) -> dict:
-        """Retorna configuración como diccionario"""
+        """Returns configuration as a dictionary"""
         return {
             key: getattr(cls, key)
             for key in dir(cls)

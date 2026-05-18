@@ -11,11 +11,14 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from contextlib import AsyncExitStack
+from typing import Any, cast
 from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.tools import load_mcp_tools
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph_supervisor import create_supervisor
+from pydantic import SecretStr
 import warnings
+import logging
 
 from core.agent.researcher import build_searcher_graph
 from core.agent.bots_agent import build_bots_workflow
@@ -23,6 +26,8 @@ from core.agent.github_agent import build_github_workflow
 from core.utils.config import config
 
 warnings.filterwarnings("ignore")
+
+logger = logging.getLogger(__name__)
 
 
 async def create_supervisor_graph(persistence_saver):
@@ -85,12 +90,12 @@ async def create_supervisor_graph(persistence_saver):
         # 3) Build/compile subgraphs with their respective tools
         searcher_graph = build_searcher_graph()
         bots_graph = build_bots_workflow(bot_tools)
-        github_graph = await build_github_workflow(github_tools + filesystem_tools)
+        github_graph = await cast(Any, build_github_workflow(github_tools + filesystem_tools))
         
         # 4) Create the supervisor graph
         supervisor_model = ChatOpenAI(
-            model="z-ai/glm-5.1",
-            api_key=config.NVIDIA_API_KEY,
+            model=config.SUPERVISOR_MODEL,
+            api_key=SecretStr(config.NVIDIA_API_KEY) if config.NVIDIA_API_KEY else None,
             base_url="https://integrate.api.nvidia.com/v1", # NVIDIA's API URL
             temperature=0.0,
         )
@@ -109,11 +114,10 @@ async def create_supervisor_graph(persistence_saver):
         return supervisor_graph
 
 
-# Para uso en LangServe, crear un builder síncrono
+# For synchronous usage
 def get_supervisor_graph(persistence_saver=None):
     """
-    Retorna el grafo supervisor para uso en LangServe
-    Nota: En producción, esto debería ser cacheado
+    Returns the supervisor graph for synchronous usage
     """
     import asyncio
     

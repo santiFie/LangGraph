@@ -17,7 +17,8 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN --mount=type=secret,id=pip_cache,target=/root/.cache/pip \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
     pip install -r requirements.txt
     
 # Copy application code

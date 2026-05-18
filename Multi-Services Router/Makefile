@@ -25,12 +25,12 @@ wait-bots:
 	exit 1
 
 app-up:
-	@$(DOCKER_COMPOSE) -f $(ROOT_COMPOSE) up --build
+	@$(DOCKER_COMPOSE) -f $(ROOT_COMPOSE) up
 
 down: app-down bots-down
 
 app-down:
-	@$(DOCKER_COMPOSE) -f $(ROOT_COMPOSE) down
+	@$(DOCKER_COMPOSE) -f $(ROOT_COMPOSE) stop
 
 bots-down:
 	@$(DOCKER_COMPOSE) -f $(BOTS_COMPOSE) stop

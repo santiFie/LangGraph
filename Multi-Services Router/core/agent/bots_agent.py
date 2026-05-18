@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langchain_groq import ChatGroq
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, START, END
@@ -31,7 +31,7 @@ def build_bots_workflow(bot_tools):
     Returns:
         Compiled Bots agent graph
     """
-    bot_model = ChatGroq(model="llama-3.3-70b-versatile", temperature=0).bind_tools(tools=bot_tools)
+    bot_model = ChatGroq(model=config.BOTS_MODEL, temperature=0).bind_tools(tools=bot_tools)
 
     async def bot_node(state: BotsAgentState):
         """Agent node that decides which tools to use"""
@@ -45,7 +45,17 @@ def build_bots_workflow(bot_tools):
         ))
         prompt = [sys_msg] + state["messages"]
         response = await bot_model.ainvoke(prompt)
-        return {"messages": [response]}
+
+        # Normalize response to AIMessage format for consistent state updates
+        if isinstance(response, dict):
+            content = response.get("content") or response.get("text") or str(response)
+            response_msg = AIMessage(content=content)
+        elif isinstance(response, BaseMessage):
+            response_msg = response
+        else:
+            response_msg = AIMessage(content=str(response))
+
+        return {"messages": [response_msg]}
 
     workflow = StateGraph(BotsAgentState)
     

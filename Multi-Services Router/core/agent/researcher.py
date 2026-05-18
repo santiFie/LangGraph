@@ -7,7 +7,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from langchain_core.messages import SystemMessage, BaseMessage
+from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_groq import ChatGroq
 from pydantic import BaseModel, Field
@@ -82,7 +82,16 @@ def build_searcher_graph():
         llm_with_tools = author_llm.bind_tools(tools=[retriever_tool, tavily_tool])
         response = await llm_with_tools.ainvoke(prompt)
 
-        return {"messages": [response]}
+        # Normalize response to AIMessage format for consistent state updates
+        if isinstance(response, dict):
+            content = response.get("content") or response.get("text") or str(response)
+            response_msg = AIMessage(content=content)
+        elif isinstance(response, BaseMessage):
+            response_msg = response
+        else:
+            response_msg = AIMessage(content=str(response))
+
+        return {"messages": [response_msg]}
 
     async def reflection_node(state: SearcherAgentState) -> dict:
         """

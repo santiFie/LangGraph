@@ -1,6 +1,6 @@
-# Multi-Services Router - LangServe Deployment
+# Multi-Services Router - FastAPI Deployment
 
-A production-ready, intelligent service router built with LangGraph, LangServe, and LangChain. Orchestrates three specialized agents for Deep Learning search, bot attack analysis, and GitHub operations.
+A production-ready, intelligent service router built with LangGraph, FastAPI, and LangChain. Orchestrates three specialized agents for Deep Learning search, bot attack analysis, and GitHub operations.
 
 ## 🚀 Features
 
@@ -14,7 +14,7 @@ A production-ready, intelligent service router built with LangGraph, LangServe, 
   - LangGraph Studio integration for visualization
   - Health checks and monitoring
   - Structured logging
-- **API First**: LangServe REST API with streaming support
+- **API First**: FastAPI REST API with streaming support
 
 ## 📋 Requirements
 
@@ -108,7 +108,7 @@ curl -X POST http://localhost:8000/supervisor/invoke \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
-      "messages": [{"role": "user", "content": "What is deep learning?"}]
+      "messages": [{"type": "human", "content": "What is deep learning?"}]
     }
   }'
 ```
@@ -120,7 +120,7 @@ curl -X POST http://localhost:8000/supervisor/stream \
   -H "Content-Type: application/json" \
   -d '{
     "input": {
-      "messages": [{"role": "user", "content": "What is deep learning?"}]
+      "messages": [{"type": "human", "content": "What is deep learning?"}]
     }
   }'
 ```
@@ -132,8 +132,8 @@ curl -X POST http://localhost:8000/supervisor/batch \
   -H "Content-Type: application/json" \
   -d '{
     "inputs": [
-      {"messages": [{"role": "user", "content": "Query 1"}]},
-      {"messages": [{"role": "user", "content": "Query 2"}]}
+      {"messages": [{"type": "human", "content": "Query 1"}]},
+      {"messages": [{"type": "human", "content": "Query 2"}]}
     ]
   }'
 ```
@@ -142,7 +142,7 @@ curl -X POST http://localhost:8000/supervisor/batch \
 
 ```
 ┌─────────────────────────────────────────────┐
-│         LangServe FastAPI App               │
+│         FastAPI App                         │
 │  (main.py - HTTP/REST Interface)            │
 └────────────────┬────────────────────────────┘
                  │
@@ -165,7 +165,7 @@ curl -X POST http://localhost:8000/supervisor/batch \
 
 ```
 Multi-Services Router/
-├── main.py                          # LangServe entry point
+├── main.py                          # FastAPI entry point
 ├── Dockerfile                       # Container image
 ├── docker-compose.yml               # Multi-container orchestration
 ├── requirements.txt                 # Python dependencies
@@ -391,7 +391,6 @@ For issues and questions:
 ## 🔗 References
 
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
-- [LangServe Documentation](https://python.langchain.com/docs/langserve)
 - [LangChain Documentation](https://python.langchain.com/docs/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [Docker Compose Documentation](https://docs.docker.com/compose/)
@@ -399,7 +398,7 @@ For issues and questions:
 ## 📊 Status
 
 - ✅ Core agents implemented
-- ✅ LangServe integration
+- ✅ FastAPI integration
 - ✅ Docker deployment
 - ✅ LangGraph Studio support
 - ✅ Persistence layer
@@ -408,4 +407,4 @@ For issues and questions:
 
 ---
 
-Built with ❤️ using LangGraph, LangServe, and LangChain
+Built with ❤️ using LangGraph, FastAPI, and LangChain

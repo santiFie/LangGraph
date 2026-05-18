@@ -5,7 +5,8 @@ Shows how to invoke different agents and use various features
 
 import httpx
 import json
-from typing import Optional, AsyncGenerator
+import uuid
+from typing import Optional, AsyncGenerator, Any, cast
 
 
 class RouterClient:
@@ -15,36 +16,45 @@ class RouterClient:
         self.base_url = base_url
         self.client = httpx.Client(base_url=base_url)
     
-    def health_check(self) -> dict:
-        """Check router health"""
-        response = self.client.get("/health")
-        response.raise_for_status()
-        return response.json()
-    
     def invoke_supervisor(self, user_message: str) -> dict:
         """Invoke the supervisor with a user message"""
         payload = {
             "input": {
-                "messages": [{"role": "user", "content": user_message}]
+                "messages": [{"type": "human", "content": user_message}]
             }
         }
         
+        payload["config"] = cast(Any, {
+            "configurable": {
+                "thread_id": str(uuid.uuid4()),
+                "checkpoint_ns": "SupervisorGraph",
+                "checkpoint_id": str(uuid.uuid4()),
+            }
+        })
         response = self.client.post(
             "/supervisor/invoke",
             json=payload,
-            timeout=30.0
+            timeout=None
         )
         response.raise_for_status()
         return response.json()
+
     
     def stream_supervisor(self, user_message: str) -> httpx.Response:
         """Stream response from supervisor"""
         payload = {
             "input": {
-                "messages": [{"role": "user", "content": user_message}]
+                "messages": [{"type": "human", "content": user_message}]
             }
         }
         
+        payload["config"] = cast(Any, {
+            "configurable": {
+                "thread_id": str(uuid.uuid4()),
+                "checkpoint_ns": "SupervisorGraph",
+                "checkpoint_id": str(uuid.uuid4()),
+            }
+        })
         response = self.client.post(
             "/supervisor/stream",
             json=payload,
@@ -54,22 +64,9 @@ class RouterClient:
         return response
 
 
-def example_1_health_check():
-    """Example 1: Basic health check"""
-    print("\n📊 Example 1: Health Check")
-    print("-" * 50)
-    
-    client = RouterClient()
-    health = client.health_check()
-    
-    print(f"Status: {health['status']}")
-    print(f"Environment: {health['environment']}")
-    print(f"Database: {health['database']}")
-
-
-def example_2_search_agent():
-    """Example 2: Use the search agent"""
-    print("\n🔍 Example 2: Search Agent")
+def test_search_agent():
+    """Test the search agent"""
+    print("\n Search Agent Test: ")
     print("-" * 50)
     
     client = RouterClient()
@@ -79,19 +76,20 @@ def example_2_search_agent():
     
     result = client.invoke_supervisor(query)
     
-    # Extract the response
     messages = result.get("output", {}).get("messages", [])
     if messages:
         last_message = messages[-1]
-        if hasattr(last_message, "content"):
+        if isinstance(last_message, dict):
+            print(f"Response: {last_message.get('content', last_message)}")
+        elif hasattr(last_message, "content"):
             print(f"Response: {last_message.content}")
         else:
             print(f"Response: {last_message}")
 
 
-def example_3_github_operations():
-    """Example 3: GitHub agent operations"""
-    print("\n🐙 Example 3: GitHub Operations")
+def test_github_operations():
+    """Test GitHub agent operations"""
+    print("\n GitHub Operations Test: ")
     print("-" * 50)
     
     client = RouterClient()
@@ -105,14 +103,18 @@ def example_3_github_operations():
     if messages:
         print("Response:")
         for msg in messages[-3:]:  # Last 3 messages
-            role = getattr(msg, "type", "assistant")
-            content = getattr(msg, "content", str(msg))
+            if isinstance(msg, dict):
+                role = msg.get("type", "assistant")
+                content = msg.get("content", str(msg))
+            else:
+                role = getattr(msg, "type", "assistant")
+                content = getattr(msg, "content", str(msg))
             print(f"  [{role}]: {content}")
 
 
-def example_4_bot_analysis():
-    """Example 4: Bot analysis agent"""
-    print("\n🤖 Example 4: Bot Analysis")
+def test_bot_mcp():
+    """Test the bot analysis agent"""
+    print("\n Bot MCP Test: ")
     print("-" * 50)
     
     client = RouterClient()
@@ -126,14 +128,18 @@ def example_4_bot_analysis():
     if messages:
         print("Response:")
         for msg in messages[-2:]:  # Last 2 messages
-            role = getattr(msg, "type", "assistant")
-            content = getattr(msg, "content", str(msg))
+            if isinstance(msg, dict):
+                role = msg.get("type", "assistant")
+                content = msg.get("content", str(msg))
+            else:
+                role = getattr(msg, "type", "assistant")
+                content = getattr(msg, "content", str(msg))
             print(f"  [{role}]: {content}")
 
 
-def example_5_streaming():
-    """Example 5: Stream response"""
-    print("\n📡 Example 5: Streaming Response")
+def test_streaming():
+    """Stream response"""
+    print("\n Streaming Response test: ")
     print("-" * 50)
     
     client = RouterClient()
@@ -142,17 +148,17 @@ def example_5_streaming():
     print(f"Query: {query}\n")
     
     print("Streaming response:")
-    with client.stream_supervisor(query) as response:
-        for line in response.iter_lines():
-            if line and line.startswith("data: "):
-                data = json.loads(line[6:])
-                # Process streamed data
-                print(f"  {data}")
+    response = client.stream_supervisor(query)
+    for line in response.iter_lines():
+        if line and line.startswith("data: "):
+            data = json.loads(line[6:])
+            # Process streamed data
+            print(f"  {data}")
 
 
-def example_6_batch_processing():
+def test_batch_processing():
     """Example 6: Batch processing"""
-    print("\n📦 Example 6: Batch Processing")
+    print("\n Batch Processing Test: ")
     print("-" * 50)
     
     client = RouterClient()
@@ -171,9 +177,9 @@ def example_6_batch_processing():
         print(f"   Status: Processed\n")
 
 
-def example_7_async_usage():
-    """Example 7: Async usage with httpx"""
-    print("\n⚡ Example 7: Async Usage")
+def test_async_usage():
+    """Test async usage with httpx"""
+    print("\n Async Usage Test: ")
     print("-" * 50)
     
     import asyncio
@@ -184,7 +190,14 @@ def example_7_async_usage():
                 "/supervisor/invoke",
                 json={
                     "input": {
-                        "messages": [{"role": "user", "content": message}]
+                        "messages": [{"type": "human", "content": message}]
+                    },
+                    "config": {
+                        "configurable": {
+                            "thread_id": str(uuid.uuid4()),
+                            "checkpoint_ns": "SupervisorGraph",
+                            "checkpoint_id": str(uuid.uuid4()),
+                        }
                     }
                 }
             )
@@ -219,27 +232,18 @@ def main():
     try:
         # Test connection first
         client = RouterClient()
-        health = client.health_check()
-        print("✓ Successfully connected to the router!")
+        print("Conection ok")
+
+        test_search_agent()
+        test_github_operations()
+        test_bot_mcp()
+        test_streaming()
+        test_batch_processing()
+        test_async_usage()
         
-        # Run examples
-        example_1_health_check()
-        # example_2_search_agent()
-        # example_3_github_operations()
-        # example_4_bot_analysis()
-        # example_5_streaming()
-        # example_6_batch_processing()
-        # example_7_async_usage()
-        
-        print("\n\n✅ Examples completed!")
-        print("\nUncomment the examples you want to run in the main() function")
         
     except Exception as e:
-        print(f"✗ Error: {e}")
-        print("\nMake sure the API is running:")
-        print("  $ python main.py")
-        print("Then run this script in another terminal")
-
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     main()

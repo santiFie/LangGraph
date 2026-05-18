@@ -8,7 +8,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage
+from langchain_core.messages import SystemMessage, BaseMessage, HumanMessage, AIMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from typing import TypedDict, Annotated, Literal
 from langgraph.graph import StateGraph, START, END
@@ -35,7 +35,7 @@ async def build_github_workflow(tools):
         Compiled GitHub agent graph
     """
     github_model = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash-lite",
+        model=config.GITHUB_MODEL,
         temperature=0
     ).bind_tools(tools=tools)
 
@@ -74,14 +74,24 @@ async def build_github_workflow(tools):
             )
         
         response = await github_model.ainvoke(prompt)
-        return {"messages": [response]}
+
+        # Normalizar respuesta a un objeto de mensaje válido
+        if isinstance(response, dict):
+            content = response.get("content") or response.get("text") or str(response)
+            response_msg = AIMessage(content=content)
+        elif isinstance(response, BaseMessage):
+            response_msg = response
+        else:
+            response_msg = AIMessage(content=str(response))
+
+        return {"messages": [response_msg]}
     
     def should_continue(state: GithubState) -> Literal["human_approval", "tools", "END"]:
         """Determine if it needs confirmation, tools, or ends"""
         last_message = state["messages"][-1]
         
         if not hasattr(last_message, "tool_calls") or not last_message.tool_calls:
-            return END
+            return "END"
         
         # Check if there's a file creation without message
         for call in last_message.tool_calls:
