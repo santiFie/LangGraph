@@ -367,9 +367,6 @@ CHECKPOINT_BATCH_SIZE = 10
 - **CORS**: Configure allowed origins in production
 - **HTTPS**: Use reverse proxy with SSL/TLS
 
-## 📝 License
-
-[Your License Here]
 
 ## 🤝 Contributing
 
@@ -404,7 +401,3 @@ For issues and questions:
 - ✅ Persistence layer
 - ⏳ Advanced monitoring (Prometheus metrics)
 - ⏳ Kubernetes deployment manifests
-
----
-
-Built with ❤️ using LangGraph, FastAPI, and LangChain
