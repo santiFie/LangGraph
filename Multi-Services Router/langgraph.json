@@ -1,8 +1,3 @@
-"""
-Multi-Services Router LangGraph Configuration
-For LangGraph Studio support
-"""
-
 {
   "graphs": {
     "supervisor": {
@@ -26,5 +21,9 @@ For LangGraph Studio support
         }
       }
     }
+  },
+  "env": ".env",
+  "auth": {
+    "path": "core.security.auth:auth"
   }
 }

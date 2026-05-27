@@ -1,0 +1,12 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "supervisor": "core.graph:create_supervisor_graph"
+  },
+  "env": ".env",
+  "auth": {
+    "path": "core.security.auth:auth"
+  }
+}
