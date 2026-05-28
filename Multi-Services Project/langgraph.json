@@ -17,5 +17,8 @@
       "allow_credentials": true
     }
   },
+  "auth": {
+    "path": "core.security.auth:auth" 
+  },
   "startup_timeout": 30
 }
