@@ -1,4 +1,4 @@
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 
 def generate_tavily():
-    return TavilySearchResults(max_results=3)
+    return TavilySearch(max_results=3)
