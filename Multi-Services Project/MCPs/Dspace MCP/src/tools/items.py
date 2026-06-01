@@ -117,16 +117,6 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         """
         Create a new archived item inside a collection (bypasses the submission workflow).
 
-        The metadata dict follows DSpace's format where each key is a Dublin Core field
-        (e.g., 'dc.title', 'dc.contributor.author') and each value is a list of
-        metadata value objects with keys: 'value', 'language', 'authority', 'confidence'.
-
-        Example metadata:
-            {
-                "dc.title": [{"value": "My Paper", "language": "en", "authority": null, "confidence": -1}],
-                "dc.contributor.author": [{"value": "Doe, John", "language": "en", "authority": null, "confidence": -1}]
-            }
-
         Args:
             collection_uuid: UUID of the owning collection.
             name: The item name (also used for dc.title if not present in metadata).

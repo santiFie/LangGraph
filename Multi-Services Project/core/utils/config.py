@@ -61,8 +61,13 @@ class Config:
     BOTS_MCP_URL: str = (
         os.getenv("BOTS_MCP_URL")
         or os.getenv("MCP_SERVER_URL")
-        or os.getenv("BOTS_API_URL")
         or "http://mcp:8001/sse"
+    )
+
+    # DSpace MCP
+    DSPACE_MCP_URL: str = (
+        os.getenv("DSPACE_MCP_URL") 
+        or "http://mcp:5000/sse"
     )
     
     # ==================== DATABASE ====================
@@ -83,6 +88,7 @@ class Config:
     GITHUB_MODEL: str = os.getenv("GITHUB_MODEL", "gemini-3.1-flash-lite-preview")
     SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "z-ai/glm-5.1")
     BOTS_MODEL: str = os.getenv("BOTS_MODEL", "llama-3.3-70b-versatile")
+    DSPACE_MODEL: str = os.getenv("DSPACE_MODEL", "z-ai/glm-5.1")
     
     @classmethod
     def validate(cls) -> bool:
@@ -91,6 +97,7 @@ class Config:
             "GEMINI_API_KEY",
             "GROQ_API_KEY",
             "TAVILY_API_KEY",
+            "DSPACE_MODEL",
         ]
         
         missing = [key for key in required_keys if not getattr(cls, key)]

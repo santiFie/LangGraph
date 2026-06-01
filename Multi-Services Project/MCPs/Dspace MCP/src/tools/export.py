@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import logging
 import time
+import json
+import os
 from typing import TYPE_CHECKING, Any
 
 import requests
@@ -58,22 +60,23 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         }
 
     @mcp.tool()
-    def export_collection_csv(collection_uuid: str, timeout_seconds: int = 120) -> dict[str, Any]:
+    def export_collection_csv(collection_uuid: str, download_directory: str = "./exports", timeout_seconds: int = 120) -> dict[str, Any]:
         """
         Export all item metadata from a collection as a CSV file.
 
         This operation is asynchronous: it launches a DSpace background process,
-        polls until it completes (or times out), then returns the CSV content as a string.
+        polls until it completes (or times out), then downloads the CSV file in a constant location and returns the path.
 
         The CSV uses DSpace's standard metadata-export format, with one row per item
         and one column per Dublin Core field.
 
         Args:
             collection_uuid: UUID of the collection to export.
+            download_directory: Local directory where the downloaded CSV file will be saved (default "./exports").
             timeout_seconds: Maximum seconds to wait for the export to finish (default 120).
 
         Returns:
-            A dict with 'process_id', 'status', and 'csv_content' (string) on success,
+            A dict with 'process_id', 'status', and 'line_count' (integer) on success, 'csv_path' with the local file path of the downloaded CSV,
             or 'error' on failure.
         """
         # Step 1: Launch the metadata-export script
@@ -82,18 +85,34 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         try:
             csrf = client._csrf()
             url = f"{client.base_url}/api/system/scripts/metadata-export/processes"
+            # Construct multipart/form-data payload with -i parameter
+            data=[
+                {"name": "-i", "value": str(collection_uuid)}
+            ]
+            json_string_data = json.dumps(data)
+            payload = {
+                "properties": (None, json_string_data, "application/json"),
+            }
+            # Send POST
             resp = client.session.post(
                 url,
-                data={"-i": collection_uuid},
-                headers={"X-XSRF-TOKEN": csrf},
+                files=payload,
+                headers={
+                    "X-XSRF-TOKEN": csrf,
+                    "Content-Type": None,
+                },
             )
+            # Retry once if we get a 401
             if resp.status_code == 401:
                 client._relogin()
                 csrf = client._csrf()
                 resp = client.session.post(
                     url,
-                    data={"-i": collection_uuid},
-                    headers={"X-XSRF-TOKEN": csrf},
+                    files=payload,
+                    headers={
+                        "X-XSRF-TOKEN": csrf,
+                        "Content-Type": None,
+                    },
                 )
             resp.raise_for_status()
         except requests.HTTPError as exc:
@@ -142,29 +161,39 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         except requests.HTTPError as exc:
             return {"error": f"Could not retrieve process files: {exc}"}
 
-        bitstreams = files_data.get("_embedded", {}).get("bitstreams", [])
-        csv_bitstream_uuid = None
-        for bs in bitstreams:
-            file_type_values = bs.get("metadata", {}).get("dspace.process.filetype", [])
-            for ftv in file_type_values:
-                if ftv.get("value") == "exportCSV":
-                    csv_bitstream_uuid = bs.get("uuid")
-                    break
-            if csv_bitstream_uuid:
+        files_list = files_data.get("_embedded", {}).get("files", [])
+        download_url = None
+        file_name = None
+
+        # Find the file with .csv extension or "collection" in the name (heuristic for exportCSV)
+        for f_obj in files_list:
+            name = f_obj.get("name", "")
+            if name.endswith(".csv") or "collection" in name:
+                # The direct download link is inside the object's properties
+                download_url = f_obj.get("_links", {}).get("content", {}).get("href")
+                file_name = name
                 break
 
-        if not csv_bitstream_uuid:
+        if not download_url:
             return {
-                "error": "Export completed but no exportCSV bitstream was found.",
+                "error": "Export completed but no exportCSV file was found.",
                 "process_id": process_id,
                 "status": status,
-                "files_found": [bs.get("name") for bs in bitstreams],
+                "files_found": [f.get("name") for f in files_list],
             }
 
         # Step 4: Download the CSV content
         try:
-            csv_bytes = client.get_content(f"/api/core/bitstreams/{csv_bitstream_uuid}/content")
-            csv_text = csv_bytes.decode("utf-8", errors="replace")
+            csv_bytes = client.get_content(download_url.split("/server/")[-1])  # Convert full URL to relative path for client.get_content()
+
+            output_dir = download_directory
+            os.makedirs(output_dir, exist_ok=True)
+            output_path = os.path.join(output_dir, f"collection_{collection_uuid}.csv")
+
+            with open(output_path, "wb") as f:
+                f.write(csv_bytes)
+
+            line_count = len(csv_bytes.split(b'\n')) - 1
         except requests.HTTPError as exc:
             return {"error": f"Failed to download CSV content: {exc}"}
 
@@ -172,5 +201,6 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
             "process_id": process_id,
             "status": "COMPLETED",
             "collection_uuid": collection_uuid,
-            "csv_content": csv_text,
+            "line_count": line_count,
+            "csv_path": output_path,
         }

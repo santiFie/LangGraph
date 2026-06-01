@@ -25,14 +25,9 @@ from config import BASE_URL, EMAIL, PASSWORD
 from dspace_client import DSpaceClient
 from tools import register_all
 
-# ---------------------------------------------------------------------------
-# Shared DSpace client (singleton used by all tools)
-# ---------------------------------------------------------------------------
+# Always create the DSpace client with the same credentials
 client = DSpaceClient(BASE_URL, EMAIL, PASSWORD)
 
-# ---------------------------------------------------------------------------
-# MCP Server
-# ---------------------------------------------------------------------------
 mcp = FastMCP(
     name="DSpace MCP",
     instructions=(
@@ -47,9 +42,6 @@ mcp = FastMCP(
 # Register all tool modules
 register_all(mcp, client)
 
-# ---------------------------------------------------------------------------
-# Startup & run
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     logger.info("Connecting to DSpace at %s", BASE_URL)
     try:

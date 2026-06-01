@@ -6,8 +6,8 @@ services:
     env_file:
       - .env
     # Allows the container to reach localhost:8080 on the host machine.
-    # On Linux, Docker does not resolve host.docker.internal automatically,
-    # so we map it via the special "host-gateway" alias.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    volumes:
+      - "/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/Dspace MCP/data:/app/data"

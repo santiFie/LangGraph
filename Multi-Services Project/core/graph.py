@@ -1,14 +1,17 @@
 import asyncio
 import os
+import sqlite3
 from typing import Any, TypedDict, cast
 from typing import Any, TypedDict, cast
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_groq import ChatGroq
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph_supervisor import create_supervisor
 from core.agent.bots_agent import build_bots_workflow
 from core.agent.github_agent import build_github_workflow
 from core.agent.researcher import build_searcher_graph
+from core.agent.dspace_agent import build_dspace_agent_workflow
 from core.utils.config import config
 
 
@@ -49,27 +52,39 @@ async def create_supervisor_graph(persistence_saver):
         }
     )
 
+    dspace_client = MultiServerMCPClient(
+        {
+            "DspaceMCP": {
+                "url": config.DSPACE_MCP_URL,
+                "transport": "sse",
+            }
+        }
+    )
+
     bot_tools = await bots_client.get_tools()
     github_tools = await github_client.get_tools(server_name="github")
     filesystem_tools = await github_client.get_tools(server_name="filesystem")
+    dspace_tools = await dspace_client.get_tools(server_name="DspaceMCP")
 
     def _build_searcher_sync():
         return build_searcher_graph()
 
-    searcher_graph = await asyncio.to_thread(_build_searcher_sync)
-    bots_graph = build_bots_workflow(bot_tools)
+    searcher_graph = _build_searcher_sync()
     github_graph = await cast(Any, build_github_workflow(github_tools + filesystem_tools))
+    bots_graph = build_bots_workflow(bot_tools)
+    dspace_graph = build_dspace_agent_workflow(dspace_tools)
 
     supervisor_model = ChatGroq(model=config.SEARCHER_MODEL, temperature=0)
     
     return create_supervisor(
         model=supervisor_model,
-        agents=[searcher_graph, bots_graph, github_graph],
+        agents=[searcher_graph, bots_graph, github_graph, dspace_graph],
         prompt=(
             "You are a supervisor that routes tasks to specialized subgraphs: "
             "- 'searcher' for answering questions using retrieved documents about deep learning or searching in the internet, "
             "- 'bots' for answering questions related to bots attacks logs, "
             "- 'github' for answering questions related to GitHub repositories and filesystem operations. "
+            "- 'dspace' for answering questions related to DSpace repositories. The dspace app is called SEDICI."
         )
     ).compile(name="SupervisorGraph", checkpointer=persistence_saver)
 
@@ -87,8 +102,8 @@ def get_supervisor_graph(persistence_saver=None):
 def _load_supervisor_graph():
     try:
         return get_supervisor_graph(None)
-    except Exception:
-        raise RuntimeError("Failed to create the supervisor graph")
+    except Exception as exc:
+        raise RuntimeError("Failed to create the supervisor graph", exc)
 
 
 supervisor_graph = _load_supervisor_graph()
