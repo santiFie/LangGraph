@@ -1,8 +1,4 @@
-import os
-import json
 from langgraph_sdk import Auth
-
-from core.utils.config import config
 
 auth = Auth()
 
@@ -12,25 +8,30 @@ VALID_TOKENS = {
     "secure_token_456": {"id": "user_456", "name": "Jane Smith", "role": "user"}
 }
 
+def _get_header(headers: dict[bytes, bytes] | None, name: str) -> str | None:
+    if not headers:
+        return None
+    target = name.lower()
+    for key, value in headers.items():
+        key_text = key.decode("latin-1") if isinstance(key, bytes) else str(key)
+        if key_text.lower() == target:
+            return value.decode("latin-1") if isinstance(value, bytes) else str(value)
+
+    return None
+
+
 @auth.authenticate
-async def get_current_user(authorization: str | None):
-    """Check if user is valid"""
-    if not authorization:
-        raise Auth.exceptions.HTTPException(status_code=401, detail="Missing authorization header")
+async def get_current_user(headers: dict[bytes, bytes] | None = None):
+    """Check if user is valid."""
 
-    parts = authorization.split()
-    if len(parts) != 2:
-        raise Auth.exceptions.HTTPException(status_code=401, detail="Invalid authorization header format")
+    token = _get_header(headers, "x-api-key")
+    if not token:
+        raise Auth.exceptions.HTTPException(status_code=401, detail="Missing x-api-key header")
 
-    scheme, token = parts
-    if scheme.lower() != "bearer":
-        raise Auth.exceptions.HTTPException(status_code=401, detail="Invalid authentication scheme")
-    
-    # Check if the token is valid
     if token not in VALID_TOKENS:
         raise Auth.exceptions.HTTPException(status_code=401, detail="Invalid token")
-    
-    # Return user information if is valid
+
+    # Return user information if it is valid.
     user_data = VALID_TOKENS[token]
 
     return {
@@ -42,7 +43,7 @@ async def get_current_user(authorization: str | None):
 @auth.on
 async def add_owner(
     ctx: Auth.types.AuthContext,
-    value: dict, 
+    value: dict,
 ):
     """Make resources private for their creator"""
     # Add owner when creating a resource

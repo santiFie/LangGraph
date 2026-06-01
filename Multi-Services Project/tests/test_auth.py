@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from langgraph_sdk import get_client, Auth
+from langgraph_sdk import get_client
 
 VALID_TOKENS = {
     "secure_token_123": {"id": "user_123", "name": "John Doe", "role": "admin"},
@@ -19,8 +19,8 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:2024")
 def _client(token: str | None = None):
     headers = None
     if token is not None:
-        headers = {"Authorization": f"Bearer {token}"}
-    return get_client(url=BASE_URL, headers=headers)
+        headers = {"X-API-Key": token}
+    return get_client(url=BASE_URL, headers=headers, api_key=None)
 
 
 def _status_code(exc: Exception) -> int | None:
@@ -53,9 +53,9 @@ def _detail(exc: Exception) -> str | None:
     return None
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_thread_with_valid_token():
-    """A valid bearer token should allow thread creation on the live app."""
+    """A valid API key should allow thread creation on the live app."""
 
     client = _client("secure_token_123")
     thread = await client.threads.create()
@@ -65,7 +65,7 @@ async def test_create_thread_with_valid_token():
     assert thread["status"] == "idle"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_thread_with_invalid_token():
     """Invalid tokens should be rejected by the deployed app."""
 
@@ -78,33 +78,7 @@ async def test_create_thread_with_invalid_token():
     assert _detail(exc_info.value) == "Invalid token"
 
 
-@pytest.mark.asyncio
-async def test_create_thread_with_invalid_scheme():
-    """Non-Bearer schemes should be rejected by the deployed app."""
-
-    client = get_client(url=BASE_URL, headers={"Authorization": "Token secure_token_123"})
-
-    with pytest.raises(Exception) as exc_info:
-        await client.threads.create()
-
-    assert _status_code(exc_info.value) == 401
-    assert _detail(exc_info.value) == "Invalid authentication scheme"
-
-
-@pytest.mark.asyncio
-async def test_create_thread_with_malformed_authorization_header():
-    """Malformed authorization headers should be rejected by the deployed app."""
-
-    client = get_client(url=BASE_URL, headers={"Authorization": "Bearer"})
-
-    with pytest.raises(Exception) as exc_info:
-        await client.threads.create()
-
-    assert _status_code(exc_info.value) == 401
-    assert _detail(exc_info.value) == "Invalid authorization header format"
-
-
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_create_thread_without_token():
     """Requests without credentials should be rejected in auth-protected deployments."""
 
@@ -114,7 +88,7 @@ async def test_create_thread_without_token():
         await client.threads.create()
 
     assert _status_code(exc_info.value) == 401
-    assert _detail(exc_info.value) == "Missing authorization header"
+    assert _detail(exc_info.value) == "Missing x-api-key header"
 
 
 if __name__ == "__main__":
