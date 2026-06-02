@@ -34,6 +34,5 @@ async def report_bot(ip: str) -> str:
         return response.text
 
 if __name__ == "__main__":
-    # In Docker, exposing SSE so LangGraph agents can connect via HTTP/SSE.
-    # Alternatively, you can use stdio.
+    # Alternatively, stdio can be used.
     mcp.run("sse")

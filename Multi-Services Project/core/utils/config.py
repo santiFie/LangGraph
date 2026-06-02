@@ -57,11 +57,16 @@ class Config:
     # Filesystem MCP
     WORKSPACE_PATH: str = os.getenv("WORKSPACE_PATH", "/home/santi/Documentos/LangGraph/")
     
-    # Bots MCP
+    # Bots MCP (SANTI)
+    # BOTS_MCP_URL: str = (
+    #     os.getenv("BOTS_MCP_URL")
+    #     or os.getenv("MCP_SERVER_URL")
+    #     or "http://mcp:8001/sse"
+    # )
+
+    # Bots MCP (RAFA)
     BOTS_MCP_URL: str = (
-        os.getenv("BOTS_MCP_URL")
-        or os.getenv("MCP_SERVER_URL")
-        or "http://mcp:8001/sse"
+        "http://localhost:9002/sse"
     )
 
     # DSpace MCP
