@@ -56,13 +56,6 @@ class Config:
     
     # Filesystem MCP
     WORKSPACE_PATH: str = os.getenv("WORKSPACE_PATH", "/home/santi/Documentos/LangGraph/")
-    
-    # Bots MCP (SANTI)
-    # BOTS_MCP_URL: str = (
-    #     os.getenv("BOTS_MCP_URL")
-    #     or os.getenv("MCP_SERVER_URL")
-    #     or "http://mcp:8001/sse"
-    # )
 
     # Bots MCP (RAFA)
     BOTS_MCP_URL: str = (
@@ -74,6 +67,8 @@ class Config:
         os.getenv("DSPACE_MCP_URL") 
         or "http://mcp:5000/sse"
     )
+
+    MINIO_MCP_URL = "http://localhost:9005/sse"
     
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")
@@ -90,11 +85,18 @@ class Config:
     
     # ==================== AGENTS ====================
     SEARCHER_MODEL: str = os.getenv("SEARCHER_MODEL", "llama-3.3-70b-versatile")
-    GITHUB_MODEL: str = os.getenv("GITHUB_MODEL", "gemini-3.1-flash-lite-preview")
-    SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "z-ai/glm-5.1")
-    BOTS_MODEL: str = os.getenv("BOTS_MODEL", "llama-3.3-70b-versatile")
-    DSPACE_MODEL: str = os.getenv("DSPACE_MODEL", "z-ai/glm-5.1")
-    
+    GITHUB_MODEL: str =  "gemini-3.1-flash-lite-preview"
+    SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "llama-3.3-70b-versatile")
+    BOTS_MODEL: str = "llama-3.3-70b-versatile"
+    DSPACE_MODEL = "z-ai/glm-5.1"
+    MINIO_MODEL = "openai/gpt-oss-120b"
+
+    # ==================== MINIO CONFIG ====================
+    MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/core/MCPs/Minio MCP"
+    DOWNLOADS_DIR: str = f"{MINIO_MCP_DIR}/Downloads"
+    MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "admin")
+    MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "admin123456")
+
     @classmethod
     def validate(cls) -> bool:
         """Validate required configuration and API keys"""
