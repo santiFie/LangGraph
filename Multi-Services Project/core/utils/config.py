@@ -69,7 +69,13 @@ class Config:
     )
 
     MINIO_MCP_URL = "http://localhost:9005/sse"
-    
+
+    # ==================== ORCHESTRATOR ====================
+    ORCHESTRATOR_API_KEY: str = os.getenv("ORCHESTRATOR_API_KEY", "")
+    ORCHESTRATOR_BASE_URL: str = os.getenv("ORCHESTRATOR_BASE_URL", "")
+    ORCHESTRATOR_LOCAL_API_KEY: str = os.getenv("ORCHESTRATOR_LOCAL_API_KEY", "")
+    ORCHESTRATOR_BASE_URL_LOCAL: str = os.getenv("ORCHESTRATOR_BASE_URL_LOCAL", "")
+
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")
     CHECKPOINT_DB: str = os.getenv("CHECKPOINT_DB", "checkpoint.db")
@@ -92,8 +98,8 @@ class Config:
     MINIO_MODEL = "openai/gpt-oss-120b"
 
     # ==================== MINIO CONFIG ====================
-    MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/core/MCPs/Minio MCP"
-    DOWNLOADS_DIR: str = f"{MINIO_MCP_DIR}/Downloads"
+    MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/Minio MCP"
+    DOWNLOADS_DIR: str = "/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/Minio MCP/Downloads"
     MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "admin")
     MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "admin123456")
 
