@@ -1,0 +1,341 @@
+from math import asin
+import os
+import operator
+import asyncio
+from typing import Annotated, Any, TypedDict, List, Tuple, Literal, cast
+from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_groq import ChatGroq
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langgraph.graph import END, START, StateGraph
+from langgraph_supervisor import create_supervisor
+from core.agent.bots_agent import build_bots_workflow
+from core.agent.github_agent import build_github_workflow
+from core.agent.researcher_agent import build_searcher_graph
+from core.agent.dspace_agent import build_dspace_agent_workflow
+from core.agent.minio_agent import DOWNLOADS_DIR, build_minio_workflow
+from pydantic import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
+from core.utils.config import config
+
+DOWNLOADS_DIR = config.DOWNLOADS_DIR
+AgentName = Literal["github", "dspace", "minio", "bots", "searcher"]
+
+class PlanStep(BaseModel):
+    """One step in the plan."""
+    task: str = Field(description="Clear and concise description of the task to be performed in this step.")
+    assigned_agent: AgentName = Field(description="The agent most suitable to execute this task based on their tools.")
+
+class PlanExecuteState(TypedDict):
+    """State for the Plan and Execute graph."""
+    input: str
+    plan: List[PlanStep]
+    past_steps: Annotated[List[Tuple[str, str]], operator.add]
+    response: str
+
+
+
+class Plan(BaseModel):
+    """Plan to follow."""
+    steps: List[PlanStep] = Field(description="Discrete steps to follow to achieve the goal. Each step should be a clear and concise task.")
+
+
+async def get_tools() -> dict[str, list[Any]]:
+    bots_client = MultiServerMCPClient(
+        {
+            "BotsAgent": {
+                "url": config.BOTS_MCP_URL.replace("mcp", "127.0.0.1"),
+                "transport": "sse",
+            }
+        }
+    )
+
+    system_env = dict(os.environ)
+    github_env = {
+        **system_env,
+        "GITHUB_PERSONAL_ACCESS_TOKEN": config.GITHUB_PERSONAL_ACCESS_TOKEN or "",
+    }
+
+    github_client = MultiServerMCPClient(
+        {
+            "filesystem": {
+                "command": "mcp-server-filesystem",
+                "args": [config.WORKSPACE_PATH],
+                "transport": "stdio",
+                "env": system_env,
+            },
+            "github": {
+                "command": "mcp-server-github",
+                "args": [],
+                "env": github_env,
+                "transport": "stdio",
+            },
+        }
+    )
+
+    dspace_client = MultiServerMCPClient(
+        {
+            "DspaceMCP": {
+                "url": config.DSPACE_MCP_URL,
+                "transport": "sse",
+            }
+        }
+    )
+
+    DOWNLOADS_DIR = config.DOWNLOADS_DIR
+    MINIO_ACCESS_KEY = config.MINIO_ROOT_USER
+    MINIO_SECRET_KEY = config.MINIO_ROOT_PASSWORD
+
+    minio_client = MultiServerMCPClient(
+        {
+            "aistor": {
+                "command": "docker",
+                "args": [
+                    "run",
+                    "-i",
+                    "--rm",
+                    "--network=host",
+                    "-v", f"{DOWNLOADS_DIR}:/Downloads",
+                    "-e", "MINIO_ENDPOINT=localhost:9003", 
+                    "-e", f"MINIO_ACCESS_KEY={MINIO_ACCESS_KEY}",
+                    "-e", f"MINIO_SECRET_KEY={MINIO_SECRET_KEY}",
+                    "-e", "MINIO_USE_SSL=false",
+                    "quay.io/minio/aistor/mcp-server-aistor:latest",
+                    "--allowed-directories", "/Downloads",
+                    "--allow-write",
+                    "--allow-delete",
+                    "--allow-admin"
+                ],
+                "transport": "stdio",
+            },
+        }
+    )
+
+    bot_tools = await bots_client.get_tools()
+    github_tools = await github_client.get_tools(server_name="github")
+    filesystem_tools = await github_client.get_tools(server_name="filesystem")
+    dspace_tools = await dspace_client.get_tools(server_name="DspaceMCP")
+    minio_tools = await minio_client.get_tools(server_name="aistor")
+
+    tools = {
+        "bots": bot_tools,
+        "github": github_tools,
+        "filesystem": filesystem_tools,
+        "dspace": dspace_tools,
+        "minio": minio_tools
+    }
+
+    return tools
+
+
+async def create_supervisor_graph(persistence_saver):
+    """
+    Creates the supervisor graph that coordinates the three agents.
+    Requires all MCP sessions to be active.
+    """
+
+    tools = await get_tools()
+
+    def _build_searcher_sync():
+        return build_searcher_graph()
+
+    searcher_graph = _build_searcher_sync()
+    github_graph = await cast(Any, build_github_workflow(tools["github"] + tools["filesystem"]))
+    bots_graph = build_bots_workflow(tools["bots"])
+    dspace_graph = await build_dspace_agent_workflow(tools["dspace"])
+    minio_graph = await build_minio_workflow(tools["minio"])
+
+    planner_llm = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0)
+
+    DOWNLOADS_DIR = config.DOWNLOADS_DIR
+    planner_system_prompt=f"""
+    You are the Master Planner for an advanced multi-agent orchestrator. 
+                        Your objective is to analyze the user's complex request and break it down into a clear, sequential, step-by-step plan.
+
+                        Each step must represent a single, discrete task and MUST be assigned to the most appropriate specialized agent.
+                        If a process involves multiple distinct actions (e.g., downloading a file and then uploading it), you must split it into separate steps.
+
+                        You have access to the following specialized agents. You must strictly assign one of these exact names to the 'assigned_agent' field:
+
+                        - 'searcher': Handles document retrieval related to deep learning and general internet searches.
+                        - 'bots': Specialized in analyzing bot attack logs.
+                        - 'github': Manages GitHub repositories and handles local filesystem operations. Use this agent if a file needs to be read, created, moved, or prepared into the {DOWNLOADS_DIR} directory.
+                        - 'dspace': Administrates SEDICI (DSpace) institutional repositories.
+                        - 'minio': Manages MinIO object/file storage. CRITICAL CONSTRAINT: This agent operates in total isolation. 
+                        It can ONLY read or write files that are already inside its internal '/Downloads' mount (which maps to the host's {DOWNLOADS_DIR}).
+                        It absolutely cannot access files outside this directory.
+
+                        ### Important Planning Rules:
+                        1. Dependency Management: If the goal requires the 'minio' agent to upload, read, or manipulate a file, you MUST create a prior step assigning the 'github' agent to move, download, or copy that file specifically into {DOWNLOADS_DIR}. The 'minio' agent will fail if the file is not placed there first.
+                        2. Clarity: Task descriptions should be highly specific so the assigned agent knows exactly what to execute without needing the full context of the final goal.
+                        3. Simplicity: Do not overcomplicate the plan. Only include the necessary steps to achieve the user's goal.
+                        4. Sequential Order: Ensure the steps are in a logical sequence, especially when there are dependencies between them (e.g., a file must be prepared by 'github' before 'minio' can upload it).
+    """
+
+    planner_prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content=planner_system_prompt),
+        ("user", "{input}")
+    ])
+
+    planner_chain = planner_prompt | planner_llm.with_structured_output(Plan)
+
+    def planner_node(state: PlanExecuteState):
+        plan = planner_chain.invoke({"input": state["input"]})
+        return {"plan": plan.steps}
+    
+    def replan_node(state: PlanExecuteState):
+        """Evalúa el progreso, remueve las tareas completadas y devuelve las pendientes."""
+        previous_plan = state["plan"]
+        past_steps = state.get("past_steps", [])
+
+        executed_context = "\n".join([f"- Task: {step}\n  Result: {result}" for step, result in past_steps])
+        
+        # Only past steps that have results 
+        previous_tasks = "\n".join([f"- {step.task} (Assigned to: {step.assigned_agent})" for step in previous_plan])
+        
+        replan_prompt = f"""You are the Re-planner agent for a multi-agent system.
+        
+        Original Goal: '{state['input']}'
+
+        Here is the CURRENT PLAN (which includes both pending and recently executed tasks):
+        {previous_tasks}
+
+        Here is the log of tasks that have ALREADY BEEN EXECUTED and their results:
+        {executed_context}
+
+        Your job is to update the plan based on the results above.
+
+        STRICT RULES:
+        1. REMOVE tasks from the current plan that have already been successfully completed.
+        2. YOU MUST KEEP all tasks from the current plan that have NOT been executed yet. Do not drop pending tasks (like saving files, uploading, etc.).
+        3. If an executed task failed or produced an error, you must add new corrective steps before continuing with the pending tasks.
+        4. CRITICAL: ONLY return an empty list of steps if the Original Goal has been 100% achieved and absolutely no pending tasks remain. 
+
+        Output the updated list of steps containing ONLY the tasks that still need to be executed:"""
+
+        structured_llm = planner_llm.with_structured_output(Plan)
+        new_plan = structured_llm.invoke(replan_prompt)
+    
+        return {"plan": new_plan.steps}
+
+    def create_agent_node(agent_graph):
+        """Factory method to create a node function for each agent graph. This node will receive the current task and the context of previous steps, and will invoke the corresponding agent graph."""
+        async def node(state: PlanExecuteState):
+            current_step = state["plan"][0]
+            current_task = current_step.task
+            
+            # Context
+            context = "\n".join([f"Step: {step}\nResult: {result}" for step, result in state.get("past_steps", [])])
+            
+            agent_prompt = f"Current task to execute: {current_task}\n\nPrevious context and results:\n{context}"
+            
+            response = await agent_graph.ainvoke({"messages": [("user", agent_prompt)]})
+            
+            if isinstance(response, dict) and "messages" in response:
+                agent_result = response["messages"][-1].content
+            else:
+                agent_result = str(response) # Fallback
+                
+            # Update past steps with the result of the current task
+            return {
+                "past_steps": [(current_task, agent_result)]
+            }
+            
+        return node
+    
+    def final_answer_node(state: PlanExecuteState):
+        """
+        Generates the final response for the user once the plan is fully executed.
+        """
+        past_steps = state.get("past_steps", [])
+        user_input = state["input"]
+        
+        # Preparamos el contexto de todo lo que se hizo
+        context = "\n".join([f"Task: {step}\nResult: {result}" for step, result in past_steps])
+        
+        final_prompt = f"""You are a helpful AI assistant managing a multi-agent system.
+        The user originally asked: '{user_input}'
+        
+        Here is the log of all actions taken by the specialized agents to fulfill this request:
+        {context}
+        
+        Based ONLY on the results above, provide a clear, natural, and concise final response to the user. 
+        Explain what was done and provide any final requested information or confirmation."""
+        
+        # Usamos un modelo normal (no estructurado) para generar texto libre
+        final_llm = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0.3)
+        response = final_llm.invoke(final_prompt)
+        
+        return {"response": response.content}
+    
+    def route_current_task(state: PlanExecuteState) -> str:
+        """Reads the current task from the plan and decides which agent to route it to based on the assigned_agent field."""
+        if not state["plan"]:
+            return "final_answer_node"
+
+        current_step = state["plan"][0]
+        assigned_agent = current_step.assigned_agent
+        return assigned_agent
+    
+    workflow = StateGraph(PlanExecuteState)
+
+    # Nodes
+    workflow.add_node("planner", planner_node)
+    workflow.add_node("replanner", replan_node)
+    workflow.add_node("final_answer_node", final_answer_node)
+    workflow.add_node("searcher", create_agent_node(searcher_graph))
+    workflow.add_node("github", create_agent_node(github_graph))
+    workflow.add_node("bots", create_agent_node(bots_graph))
+    workflow.add_node("dspace", create_agent_node(dspace_graph))
+    workflow.add_node("minio", create_agent_node(minio_graph))
+
+    # Edges
+    workflow.add_edge(START, "planner")
+    workflow.add_conditional_edges("planner", route_current_task, {
+        "searcher": "searcher",
+        "github": "github",
+        "bots": "bots",
+        "dspace": "dspace",
+        "minio": "minio",
+        "replanner": "replanner"
+    })
+
+    for agent in ["searcher", "github", "bots", "dspace", "minio"]:
+        workflow.add_edge(agent, "replanner")
+
+    workflow.add_conditional_edges(
+        "replanner",
+        route_current_task,
+        {
+            "searcher": "searcher",
+            "github": "github",
+            "bots": "bots",
+            "dspace": "dspace",
+            "minio": "minio",
+            "final_answer_node": "final_answer_node"
+        }
+    )
+
+    workflow.add_edge("final_answer_node", END)
+
+    return workflow.compile(name="SupervisorGraph")
+
+
+def get_supervisor_graph(persistence_saver=None):
+    """Returns the supervisor graph for synchronous usage."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    return loop.run_until_complete(create_supervisor_graph(persistence_saver))
+
+def _load_supervisor_graph():
+    try:
+        return get_supervisor_graph(None)
+    except Exception as exc:
+        raise RuntimeError("Failed to create the supervisor graph", exc)
+
+
+supervisor_graph = _load_supervisor_graph()

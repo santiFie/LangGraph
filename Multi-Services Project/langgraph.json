@@ -3,7 +3,7 @@
     "."
   ],
   "graphs": {
-    "supervisor": "core.graph:supervisor_graph"
+    "supervisor": "core.graph_plan:supervisor_graph"
   },
   "env": ".env",
   "http": {

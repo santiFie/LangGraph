@@ -11,7 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph_supervisor import create_supervisor
 from core.agent.bots_agent import build_bots_workflow
 from core.agent.github_agent import build_github_workflow
-from core.agent.researcher import build_searcher_graph
+from core.agent.researcher_agent import build_searcher_graph
 from core.agent.dspace_agent import build_dspace_agent_workflow
 from core.agent.minio_agent import build_minio_workflow
 from core.utils.config import config
@@ -104,7 +104,7 @@ async def create_supervisor_graph(persistence_saver):
     searcher_graph = _build_searcher_sync()
     github_graph = await cast(Any, build_github_workflow(github_tools + filesystem_tools))
     bots_graph = build_bots_workflow(bot_tools)
-    dspace_graph = build_dspace_agent_workflow(dspace_tools)
+    dspace_graph = await build_dspace_agent_workflow(dspace_tools)
     minio_graph = await build_minio_workflow(minio_tools)
 
     supervisor_model = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0)
@@ -117,9 +117,10 @@ async def create_supervisor_graph(persistence_saver):
             CRITICAL: You must decompose tasks. Agents do not share tools, but they share a local directory: {DOWNLOADS_DIR}
 
             To upload a local system file to MinIO, you MUST follow this strict sequence:
-            1. Route to the 'github' agent and instruct it ONLY to copy the requested file from its local path to the shared directory: {DOWNLOADS_DIR}.
-            2. Wait for the 'github' agent to confirm the file has been successfully copied.
-            3. Once confirmed, route to the 'minio' agent and instruct it to upload that file to the required bucket.
+            1. Store the requested file in the shared directory: {DOWNLOADS_DIR}.
+                1.1) If the file is not already in {DOWNLOADS_DIR}, use the 'github' agent's filesystem tools to copy or move it there. Do NOT attempt to interact with MinIO directly to access files outside of {DOWNLOADS_DIR}.
+                1.2) If the file can be generated directly in {DOWNLOADS_DIR} by any agent, instruct that agent to do so. For example, if the file is a CSV export of DSpace metadata, instruct the 'dspace' agent to save the export directly into {DOWNLOADS_DIR}.
+            2. Once confirmed, route to the 'minio' agent and instruct it to upload that file to the required bucket.
 
             Agent capabilities and constraints:
             - 'searcher': Documents and internet search.
