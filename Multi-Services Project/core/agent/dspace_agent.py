@@ -19,7 +19,7 @@ class DspaceAgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     tools_to_use: list[str] 
 
-def build_dspace_agent_workflow(tools):
+async def build_dspace_agent_workflow(tools):
     """Builds the DspaceAgent workflow"""
 
     async def router_node(state: DspaceAgentState) -> dict:

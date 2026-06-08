@@ -15,9 +15,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
 from core.utils.config import config
 from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
+from core.utils.config import config
 
 class BotsAgentState(TypedDict):
     """State for the Bots agent"""
@@ -26,30 +24,27 @@ class BotsAgentState(TypedDict):
 def get_bot_model_with_tools(bot_tools):
     import httpx
 
-    # orchestrator_api_key = os.getenv("ORCHESTRATOR_LOCAL_API_KEY")
+    orchestrator_api_key = config.ORCHESTRATOR_LOCAL_API_KEY
 
-    # if not orchestrator_api_key:
-    #     raise RuntimeError("Missing ORCHESTRATOR_API_KEY_LOCAL environment variable")
+    if not orchestrator_api_key:
+        raise RuntimeError("Missing ORCHESTRATOR_API_KEY_LOCAL environment variable")
 
-    # def create_custom_http_client():
-    #     """Cliente HTTP con autenticación via header X-API-Key"""
-    #     return httpx.Client(
-    #         headers={"X-API-Key": orchestrator_api_key},
-    #         timeout=60.0,
-    #     )
+    def create_custom_http_client():
+        """Cliente HTTP con autenticación via header X-API-Key"""
+        return httpx.Client(
+            headers={"X-API-Key": orchestrator_api_key},
+            timeout=60.0,
+        )
+    
+    bot_model = ChatOpenAI(
+        model="qwen3:30b", 
+        temperature=0,
+        base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
+        api_key="dummy",  # Not used, apy key is sent via custom header 
+        http_client=create_custom_http_client(),
+    ).bind_tools(tools=bot_tools)    
 
-    # bot_model = ChatOpenAI(
-    #     model="qwen3:30b", 
-    #     temperature=0,
-    #     base_url=os.environ["ORCHESTRATOR_BASE_URL_LOCAL"],
-    #     api_key="dummy",  # Not used, apy key is sent via custom header 
-    #     http_client=create_custom_http_client(),  # Cliente personalizado
-    #     http_async_client=create_custom_async_http_client(),
-    #     streaming=False, # Not implemented yet in llm orchestrator
-    #     model_kwargs={"stream": False}
-    # ).bind_tools(tools=bot_tools)    
-
-    # return bot_model
+    return bot_model
 
 def build_bots_workflow(bot_tools):
     """
@@ -62,6 +57,7 @@ def build_bots_workflow(bot_tools):
         Compiled Bots agent graph
     """
     bot_model = ChatGroq(model=config.BOTS_MODEL, temperature=0).bind_tools(tools=bot_tools)
+    # bot_model = get_bot_model_with_tools(bot_tools)
 
 
     async def bot_node(state: BotsAgentState):
