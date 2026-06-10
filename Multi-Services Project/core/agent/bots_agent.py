@@ -21,32 +21,41 @@ class BotsAgentState(TypedDict):
     """State for the Bots agent"""
     messages: Annotated[list[BaseMessage], add_messages]
 
-def get_bot_model_with_tools(bot_tools):
+async def get_bot_model_with_tools(bot_tools):
     import httpx
+    import openai
 
     orchestrator_api_key = config.ORCHESTRATOR_LOCAL_API_KEY
 
     if not orchestrator_api_key:
         raise RuntimeError("Missing ORCHESTRATOR_API_KEY_LOCAL environment variable")
 
-    def create_custom_http_client():
-        """Cliente HTTP con autenticación via header X-API-Key"""
-        return httpx.Client(
-            headers={"X-API-Key": orchestrator_api_key},
-            timeout=60.0,
-        )
-    
+    auth_headers = {"X-API-Key": orchestrator_api_key}
+    timeout = 60.0
+
+    # HTTP sync client
+    sync_httpx_client = httpx.Client(headers=auth_headers, timeout=timeout)
+
+    # HTTP async client
+    async_httpx_client = httpx.AsyncClient(headers=auth_headers, timeout=timeout)
+    async_openai_client = openai.AsyncOpenAI(
+        base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
+        api_key="dummy",
+        http_client=async_httpx_client,
+    )
+
     bot_model = ChatOpenAI(
-        model="qwen3:30b", 
+        model="qwen3:30b",
         temperature=0,
         base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
-        api_key="dummy",  # Not used, apy key is sent via custom header 
-        http_client=create_custom_http_client(),
-    ).bind_tools(tools=bot_tools)    
+        api_key="dummy",
+        http_client=sync_httpx_client,                  # used by .invoke()
+        async_client=async_openai_client.chat.completions, # used by .ainvoke()
+    ).bind_tools(tools=bot_tools)
 
     return bot_model
 
-def build_bots_workflow(bot_tools):
+async def build_bots_workflow(bot_tools):
     """
     Builds the Bots agent graph
     
@@ -57,7 +66,7 @@ def build_bots_workflow(bot_tools):
         Compiled Bots agent graph
     """
     bot_model = ChatGroq(model=config.BOTS_MODEL, temperature=0).bind_tools(tools=bot_tools)
-    # bot_model = get_bot_model_with_tools(bot_tools)
+    #bot_model = await get_bot_model_with_tools(bot_tools)
 
 
     async def bot_node(state: BotsAgentState):
@@ -96,7 +105,7 @@ def build_bots_workflow(bot_tools):
         - **No Assumptions:** If an IP format looks invalid or a query is ambiguous, ask for clarification before guessing or invoking tools blindly.            
         """))
         prompt = [sys_msg] + state["messages"]
-        response = bot_model.invoke(prompt)
+        response = await bot_model.ainvoke(prompt)
 
         # Normalize response to AIMessage format for consistent state updates
         if isinstance(response, dict):
