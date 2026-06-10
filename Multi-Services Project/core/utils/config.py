@@ -98,8 +98,8 @@ class Config:
     MINIO_MODEL = "openai/gpt-oss-120b"
 
     # ==================== MINIO CONFIG ====================
-    MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/Minio MCP"
-    DOWNLOADS_DIR: str = "/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/Minio MCP/Downloads"
+    MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/MinIO MCP"
+    DOWNLOADS_DIR: str = "/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/MinIO MCP/Downloads"
     MINIO_ROOT_USER: str = os.getenv("MINIO_ROOT_USER", "admin")
     MINIO_ROOT_PASSWORD: str = os.getenv("MINIO_ROOT_PASSWORD", "admin123456")
 
