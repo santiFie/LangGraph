@@ -60,7 +60,7 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         }
 
     @mcp.tool()
-    def export_collection_csv(collection_uuid: str, download_directory: str = "./exports", timeout_seconds: int = 120) -> dict[str, Any]:
+    def export_collection_csv(collection_uuid: str, download_directory: str = "/app/data", timeout_seconds: int = 120) -> dict[str, Any]:
         """
         Export all item metadata from a collection as a CSV file.
 
@@ -72,7 +72,7 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
 
         Args:
             collection_uuid: UUID of the collection to export.
-            download_directory: Local directory where the downloaded CSV file will be saved (default "./exports").
+            download_directory: Local directory where the downloaded CSV file will be saved (default "/app/data").
             timeout_seconds: Maximum seconds to wait for the export to finish (default 120).
 
         Returns:

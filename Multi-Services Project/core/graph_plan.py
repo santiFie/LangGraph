@@ -17,6 +17,7 @@ from core.agent.minio_agent import DOWNLOADS_DIR, build_minio_workflow
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from core.utils.config import config
+from core.utils.rag_context import retrieve_planner_context
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
 AgentName = Literal["github", "dspace", "minio", "bots", "searcher"]
@@ -29,6 +30,7 @@ class PlanStep(BaseModel):
 class PlanExecuteState(TypedDict):
     """State for the Plan and Execute graph."""
     input: str
+    domain_context: str # Dynamic context 
     plan: List[PlanStep]
     past_steps: Annotated[List[Tuple[str, str]], operator.add]
     response: str
@@ -141,7 +143,7 @@ async def create_supervisor_graph(persistence_saver):
 
     searcher_graph = _build_searcher_sync()
     github_graph = await cast(Any, build_github_workflow(tools["github"] + tools["filesystem"]))
-    bots_graph = build_bots_workflow(tools["bots"])
+    bots_graph = await build_bots_workflow(tools["bots"])
     dspace_graph = await build_dspace_agent_workflow(tools["dspace"])
     minio_graph = await build_minio_workflow(tools["minio"])
 
@@ -149,38 +151,56 @@ async def create_supervisor_graph(persistence_saver):
 
     DOWNLOADS_DIR = config.DOWNLOADS_DIR
     planner_system_prompt=f"""
-    You are the Master Planner for an advanced multi-agent orchestrator. 
-                        Your objective is to analyze the user's complex request and break it down into a clear, sequential, step-by-step plan.
+    You are the Master Planner for an advanced multi-agent orchestrator.
+    Your objective is to analyze the user's complex request and break it down into a clear, sequential, step-by-step plan.
 
-                        Each step must represent a single, discrete task and MUST be assigned to the most appropriate specialized agent.
-                        If a process involves multiple distinct actions (e.g., downloading a file and then uploading it), you must split it into separate steps.
+    Each step must represent a single, discrete task and MUST be assigned to the most appropriate specialized agent.
+    If a process involves multiple distinct actions (e.g., downloading a file and then uploading it), you must split it into separate steps.
 
-                        You have access to the following specialized agents. You must strictly assign one of these exact names to the 'assigned_agent' field:
+    You have access to the following specialized agents. You must strictly assign one of these exact names to the 'assigned_agent' field:
 
-                        - 'searcher': Handles document retrieval related to deep learning and general internet searches.
-                        - 'bots': Specialized in analyzing bot attack logs.
-                        - 'github': Manages GitHub repositories and handles local filesystem operations. Use this agent if a file needs to be read, created, moved, or prepared into the {DOWNLOADS_DIR} directory.
-                        - 'dspace': Administrates SEDICI (DSpace) institutional repositories.
-                        - 'minio': Manages MinIO object/file storage. CRITICAL CONSTRAINT: This agent operates in total isolation. 
-                        It can ONLY read or write files that are already inside its internal '/Downloads' mount (which maps to the host's {DOWNLOADS_DIR}).
-                        It absolutely cannot access files outside this directory.
+    - 'searcher': Handles document retrieval related to deep learning and general internet searches.
+    - 'bots': Specialized in analyzing bot attack logs.
+    - 'github': Manages GitHub repositories and handles local filesystem operations. Use this agent if a file needs to be read, created, moved, or prepared into the {DOWNLOADS_DIR} directory.
+    - 'dspace': Administrates SEDICI (DSpace) institutional repositories.
+    - 'minio': Manages MinIO object/file storage. CRITICAL CONSTRAINT: This agent operates in total isolation.
+               It can ONLY read or write files that are already inside its internal '/Downloads' mount (which maps to the host's {DOWNLOADS_DIR}).
+               It absolutely cannot access files outside this directory.
 
-                        ### Important Planning Rules:
-                        1. Dependency Management: If the goal requires the 'minio' agent to upload, read, or manipulate a file, you MUST create a prior step assigning the 'github' agent to move, download, or copy that file specifically into {DOWNLOADS_DIR}. The 'minio' agent will fail if the file is not placed there first.
-                        2. Clarity: Task descriptions should be highly specific so the assigned agent knows exactly what to execute without needing the full context of the final goal.
-                        3. Simplicity: Do not overcomplicate the plan. Only include the necessary steps to achieve the user's goal.
-                        4. Sequential Order: Ensure the steps are in a logical sequence, especially when there are dependencies between them (e.g., a file must be prepared by 'github' before 'minio' can upload it).
+    ### Context Provided to You
+    The user message includes a "Relevant Context" section with two parts:
+    - **🤖 Agent Capabilities**: Describes what each agent can do and its constraints. Use this to decide which agent to assign to each step.
+    - **📋 Workflow Playbooks**: Describes step-by-step patterns for common multi-agent workflows (e.g., uploading to MinIO, exporting from DSpace). Use these as a blueprint when the user's request matches a known pattern.
+
+    Always prioritize playbook guidance when available — it encodes tested, correct sequences.
+
+    ### Important Planning Rules:
+    1. Dependency Management: If the goal requires the 'minio' agent to upload, read, or manipulate a file, you MUST create a prior step assigning the 'github' agent to move, download, or copy that file specifically into {DOWNLOADS_DIR}. The 'minio' agent will fail if the file is not placed there first.
+    2. Clarity: Task descriptions should be highly specific so the assigned agent knows exactly what to execute without needing the full context of the final goal.
+    3. Simplicity: Do not overcomplicate the plan. Only include the necessary steps to achieve the user's goal.
+    4. Sequential Order: Ensure the steps are in a logical sequence, especially when there are dependencies between them (e.g., a file must be prepared by 'github' before 'minio' can upload it).
     """
 
     planner_prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=planner_system_prompt),
-        ("user", "{input}")
+        ("user",
+         "## User Request\n{input}\n\n"
+         "{domain_context}"
+        )
     ])
 
     planner_chain = planner_prompt | planner_llm.with_structured_output(Plan)
 
+    def rag_context_node(state: PlanExecuteState) -> dict:
+        """Retrieves relevant workflow context from agent docs and populates domain_context."""
+        context = retrieve_planner_context(state["input"])
+        return {"domain_context": context}
+
     def planner_node(state: PlanExecuteState):
-        plan = planner_chain.invoke({"input": state["input"]})
+        plan = planner_chain.invoke({
+            "input": state["input"],
+            "domain_context": state.get("domain_context") or "",
+        })
         return {"plan": plan.steps}
     
     def replan_node(state: PlanExecuteState):
@@ -250,7 +270,7 @@ async def create_supervisor_graph(persistence_saver):
         past_steps = state.get("past_steps", [])
         user_input = state["input"]
         
-        # Preparamos el contexto de todo lo que se hizo
+        # Past context
         context = "\n".join([f"Task: {step}\nResult: {result}" for step, result in past_steps])
         
         final_prompt = f"""You are a helpful AI assistant managing a multi-agent system.
@@ -262,7 +282,7 @@ async def create_supervisor_graph(persistence_saver):
         Based ONLY on the results above, provide a clear, natural, and concise final response to the user. 
         Explain what was done and provide any final requested information or confirmation."""
         
-        # Usamos un modelo normal (no estructurado) para generar texto libre
+        # Use not structured output here
         final_llm = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0.3)
         response = final_llm.invoke(final_prompt)
         
@@ -280,6 +300,7 @@ async def create_supervisor_graph(persistence_saver):
     workflow = StateGraph(PlanExecuteState)
 
     # Nodes
+    workflow.add_node("rag_context", rag_context_node)
     workflow.add_node("planner", planner_node)
     workflow.add_node("replanner", replan_node)
     workflow.add_node("final_answer_node", final_answer_node)
@@ -290,7 +311,8 @@ async def create_supervisor_graph(persistence_saver):
     workflow.add_node("minio", create_agent_node(minio_graph))
 
     # Edges
-    workflow.add_edge(START, "planner")
+    workflow.add_edge(START, "rag_context")
+    workflow.add_edge("rag_context", "planner")
     workflow.add_conditional_edges("planner", route_current_task, {
         "searcher": "searcher",
         "github": "github",
