@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores.faiss import DistanceStrategy
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -118,7 +119,7 @@ def _build_agent_vectorstore() -> FAISS:
     """Build and cache the FAISS index for agent capability docs."""
     logger.info("Building agent-docs vector store from: %s", AGENT_DOCS_DIR)
     docs = _load_markdown_docs(AGENT_DOCS_DIR, "agent")
-    store = FAISS.from_documents(docs, _get_embeddings())
+    store = FAISS.from_documents(docs, _get_embeddings(), distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE)
     logger.info("Agent vector store ready (%d vectors).", store.index.ntotal)
     return store
 
@@ -128,7 +129,7 @@ def _build_playbook_vectorstore() -> FAISS:
     """Build and cache the FAISS index for workflow playbooks."""
     logger.info("Building playbook vector store from: %s", PLAYBOOKS_DIR)
     docs = _load_markdown_docs(PLAYBOOKS_DIR, "playbook")
-    store = FAISS.from_documents(docs, _get_embeddings())
+    store = FAISS.from_documents(docs, _get_embeddings(), distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE)
     logger.info("Playbook vector store ready (%d vectors).", store.index.ntotal)
     return store
 
@@ -176,7 +177,11 @@ def retrieve_planner_context(
     # --- Agent RAG ---
     try:
         agent_store = _build_agent_vectorstore()
-        agent_docs  = agent_store.as_retriever(search_kwargs={"k": agent_k}).invoke(query)
+        agent_docs = agent_store.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={"k": agent_k},
+            #search_kwargs={"k": agent_k, "score_threshold": 0.35},
+        ).invoke(query)
         if agent_docs:
             agent_sections = _format_chunks(agent_docs)
             agent_sources  = {d.metadata.get("source", "unknown") for d in agent_docs}
@@ -188,7 +193,10 @@ def retrieve_planner_context(
     # --- Playbook RAG ---
     try:
         playbook_store = _build_playbook_vectorstore()
-        playbook_docs  = playbook_store.as_retriever(search_kwargs={"k": playbook_k}).invoke(query)
+        playbook_docs = playbook_store.as_retriever(
+            search_type="similarity_score_threshold",
+            search_kwargs={"k": playbook_k, "score_threshold": 0.45},
+        ).invoke(query)
         if playbook_docs:
             playbook_sections = _format_chunks(playbook_docs)
             playbook_sources  = {d.metadata.get("source", "unknown") for d in playbook_docs}
