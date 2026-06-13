@@ -1,4 +1,3 @@
-from math import asin
 import os
 import operator
 import asyncio
@@ -8,19 +7,19 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_groq import ChatGroq
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.graph import END, START, StateGraph
-from langgraph_supervisor import create_supervisor
 from core.agent.bots_agent import build_bots_workflow
 from core.agent.github_agent import build_github_workflow
 from core.agent.researcher_agent import build_searcher_graph
 from core.agent.dspace_agent import build_dspace_agent_workflow
-from core.agent.minio_agent import DOWNLOADS_DIR, build_minio_workflow
+from core.agent.minio_agent import build_minio_workflow
+from core.agent.openalex_agent import build_openalex_workflow
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from core.utils.config import config
 from core.utils.rag_context import retrieve_planner_context
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
-AgentName = Literal["github", "dspace", "minio", "bots", "searcher"]
+AgentName = Literal["github", "dspace", "minio", "bots", "searcher", "openalex"]
 
 class PlanStep(BaseModel):
     """One step in the plan."""
@@ -113,18 +112,37 @@ async def get_tools() -> dict[str, list[Any]]:
         }
     )
 
+    openalex_client = MultiServerMCPClient(
+        {
+            "openalex": {
+                "command": "docker",
+                "args": [
+                    "run",
+                    "--rm",
+                    "-i",
+                    "-e", f"OPENALEX_API_KEY={config.OPENALEX_API_KEY}",
+                    "-e", f"OPENALEX_EMAIL={config.OPENALEX_EMAIL}",
+                    "multi-servicesproject-openalex-mcp",
+                ],
+                "transport": "stdio",
+            }
+        }
+    )
+
     bot_tools = await bots_client.get_tools()
     github_tools = await github_client.get_tools(server_name="github")
     filesystem_tools = await github_client.get_tools(server_name="filesystem")
     dspace_tools = await dspace_client.get_tools(server_name="DspaceMCP")
     minio_tools = await minio_client.get_tools(server_name="aistor")
+    openalex_tools = await openalex_client.get_tools(server_name="openalex")
 
     tools = {
         "bots": bot_tools,
         "github": github_tools,
         "filesystem": filesystem_tools,
         "dspace": dspace_tools,
-        "minio": minio_tools
+        "minio": minio_tools,
+        "openalex": openalex_tools
     }
 
     return tools
@@ -146,6 +164,7 @@ async def create_supervisor_graph(persistence_saver):
     bots_graph = await build_bots_workflow(tools["bots"])
     dspace_graph = await build_dspace_agent_workflow(tools["dspace"])
     minio_graph = await build_minio_workflow(tools["minio"])
+    openalex_graph = await build_openalex_workflow(tools["openalex"])
 
     planner_llm = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0)
 
@@ -166,9 +185,10 @@ async def create_supervisor_graph(persistence_saver):
     - 'minio': Manages MinIO object/file storage. CRITICAL CONSTRAINT: This agent operates in total isolation.
                It can ONLY read or write files that are already inside its internal '/Downloads' mount (which maps to the host's {DOWNLOADS_DIR}).
                It absolutely cannot access files outside this directory.
+    - 'openalex': Manages the retrieval of academic papers, authors, and institutional information using the OpenAlex database.
 
     ### Context Provided to You
-    The user message includes a "Relevant Context" section with two parts:
+    The user message includes a "Domain Context" section with two parts:
     - **🤖 Agent Capabilities**: Describes what each agent can do and its constraints. Use this to decide which agent to assign to each step.
     - **📋 Workflow Playbooks**: Describes step-by-step patterns for common multi-agent workflows (e.g., uploading to MinIO, exporting from DSpace). Use these as a blueprint when the user's request matches a known pattern.
 
@@ -179,6 +199,7 @@ async def create_supervisor_graph(persistence_saver):
     2. Clarity: Task descriptions should be highly specific so the assigned agent knows exactly what to execute without needing the full context of the final goal.
     3. Simplicity: Do not overcomplicate the plan. Only include the necessary steps to achieve the user's goal.
     4. Sequential Order: Ensure the steps are in a logical sequence, especially when there are dependencies between them (e.g., a file must be prepared by 'github' before 'minio' can upload it).
+    5. NO Presentation Steps: NEVER create a step whose sole purpose is to "present", "format", "recopilar", or "display" results to the user. That is the exclusive responsibility of the final_answer_node which runs automatically after the plan is complete. Every step in the plan MUST perform a concrete action (search, fetch, upload, filter, etc.).
     """
 
     planner_prompt = ChatPromptTemplate.from_messages([
@@ -229,7 +250,12 @@ async def create_supervisor_graph(persistence_saver):
         1. REMOVE tasks from the current plan that have already been successfully completed.
         2. YOU MUST KEEP all tasks from the current plan that have NOT been executed yet. Do not drop pending tasks (like saving files, uploading, etc.).
         3. If an executed task failed or produced an error, you must add new corrective steps before continuing with the pending tasks.
-        4. CRITICAL: ONLY return an empty list of steps if the Original Goal has been 100% achieved and absolutely no pending tasks remain. 
+        4. CRITICAL — Goal Completion: Return an EMPTY list of steps if ANY of the following conditions are met:
+           a) All steps in the current plan have been executed AND their results collectively satisfy the Original Goal.
+           b) The Original Goal is a pure retrieval/listing/search request (e.g., "find", "list", "show", "get", "what are") AND at least one executed step has already returned the requested data WITHOUT errors.
+           c) There are no pending tasks left in the current plan.
+           IMPORTANT: For goals of type (b), do NOT add steps to "recopilar", "presentar", "filtrar" or "display" results — those are handled automatically after the plan ends.
+        5. NEVER add steps whose sole purpose is to "present", "format", or "recopilar" results. Only add steps that perform concrete actions.
 
         Output the updated list of steps containing ONLY the tasks that still need to be executed:"""
 
@@ -309,6 +335,7 @@ async def create_supervisor_graph(persistence_saver):
     workflow.add_node("bots", create_agent_node(bots_graph))
     workflow.add_node("dspace", create_agent_node(dspace_graph))
     workflow.add_node("minio", create_agent_node(minio_graph))
+    workflow.add_node("openalex", create_agent_node(openalex_graph))
 
     # Edges
     workflow.add_edge(START, "rag_context")
@@ -319,10 +346,11 @@ async def create_supervisor_graph(persistence_saver):
         "bots": "bots",
         "dspace": "dspace",
         "minio": "minio",
+        "openalex": "openalex",
         "replanner": "replanner"
     })
 
-    for agent in ["searcher", "github", "bots", "dspace", "minio"]:
+    for agent in ["searcher", "github", "bots", "dspace", "minio", "openalex"]:
         workflow.add_edge(agent, "replanner")
 
     workflow.add_conditional_edges(
@@ -334,6 +362,7 @@ async def create_supervisor_graph(persistence_saver):
             "bots": "bots",
             "dspace": "dspace",
             "minio": "minio",
+            "openalex": "openalex",
             "final_answer_node": "final_answer_node"
         }
     )
