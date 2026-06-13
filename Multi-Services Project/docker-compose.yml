@@ -1,0 +1,44 @@
+services:
+
+  # ─────────────────────────────────────────
+  # DSpace MCP  →  http://localhost:5000/sse
+  # ─────────────────────────────────────────
+  dspace-mcp:
+    build:
+      context: ./MCPs/Dspace MCP
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      DSPACE_BASE_URL: ${DSPACE_BASE_URL:-http://host.docker.internal:8080/server}
+      DSPACE_EMAIL: ${DSPACE_EMAIL}
+      DSPACE_PASSWORD: ${DSPACE_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    volumes:
+      - ./MCPs/Dspace MCP/data:/app/data
+
+  # ─────────────────────────────────────────
+  # MinIO MCP   →  API: 9003 | Console: 9004
+  # ─────────────────────────────────────────
+  minio-mcp:
+    build:
+      context: ./MCPs/MinIO MCP
+      dockerfile: Dockerfile
+    ports:
+      - "9003:9000"
+      - "9004:9004"
+    env_file:
+      - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - data-minio:/data
+    restart: unless-stopped
+
+volumes:
+  data-minio:

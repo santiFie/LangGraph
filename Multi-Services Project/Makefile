@@ -1,24 +1,43 @@
-.PHONY: up down studio studio-url open-studio
+.PHONY: up down build logs build-openalex
 
-# Levantamos el container proxy (API de Bots / MCP Server), seguido de Langgraph dev
+PROJECT_ROOT := $(shell pwd)
+COMPOSE := docker compose -f "$(PROJECT_ROOT)/docker-compose.yml"
+BOTS_COMPOSE := docker compose -f "/home/santi/Documentos/Prebi/bots-detector/docker-compose.yml"
+
+# ─── Levantar todo ────────────────────────────────────────────────────────────
 up:
-	@echo "Starting MCPs"
-	docker compose -f "/home/santi/Documentos/Prebi/bots-detector/docker-compose.yml" up -d
-	docker compose -f "../Multi-Services Project/MCPs/Dspace MCP/docker-compose.yml" up -d
-	docker compose -f "../Multi-Services Project/MCPs/MinIO MCP/docker-compose.yml" up -d
-	@echo "Iniciando LangGraph Platform local..."
+	@echo "▶  Starting external services (Bots Detector)..."
+	$(BOTS_COMPOSE) up -d
+	@echo "▶  Starting MCPs (DSpace + MinIO)..."
+	$(COMPOSE) up -d
+	@echo "▶  Iniciando LangGraph Platform local..."
 	LANGGRAPH_STARTUP_TIMEOUT=30 langgraph dev --allow-blocking
 
+# ─── Build images ─────────────────────────────────────────────────────────────
+# NOTE: OpenAlex MCP uses stdio transport → not in docker-compose, built standalone.
 build:
-	@echo "Building MCPs"
-	docker compose -f "/home/santi/Documentos/Prebi/bots-detector/docker-compose.yml" build
-	docker compose -f "../Multi-Services Project/MCPs/Dspace MCP/docker-compose.yml" build
-	docker compose -f "../Multi-Services Project/MCPs/MinIO MCP/docker-compose.yml" build
+	@echo "▶  Building MCP images..."
+	$(BOTS_COMPOSE) build
+	$(COMPOSE) build
+	@echo "▶  Building OpenAlex MCP image (stdio, on-demand)..."
+	docker build -t multi-servicesproject-openalex-mcp "$(PROJECT_ROOT)/MCPs/OpenAlex MCP"
 
-# Detenemos LangGraph (mediante interrupción local) y apagamos el container proxy
+# ─── Build solo OpenAlex MCP ──────────────────────────────────────────────────
+build-openalex:
+	@echo "▶  Building OpenAlex MCP image..."
+	docker build -t multi-servicesproject-openalex-mcp "$(PROJECT_ROOT)/MCPs/OpenAlex MCP"
+
+# ─── Detener todo ─────────────────────────────────────────────────────────────
 down:
-	@echo "Stopping MCPs"
-	docker compose -f "/home/santi/Documentos/Prebi/DSpace/docker/docker-compose.yml" stop
-	docker compose -f "/home/santi/Documentos/Prebi/bots-detector/docker-compose.yml" down
-	docker compose -f "../Multi-Services Project/MCPs/Dspace MCP/docker-compose.yml" down
-	docker compose -f "../Multi-Services Project/MCPs/MinIO MCP/docker-compose.yml" down
+	@echo "▶  Stopping MCPs (DSpace + MinIO)..."
+	$(COMPOSE) stop
+	@echo "▶  Stopping external services (Bots Detector)..."
+	$(BOTS_COMPOSE) down
+
+# ─── Logs en tiempo real ──────────────────────────────────────────────────────
+logs:
+	$(COMPOSE) logs -f
+
+# ─── Reiniciar solo los MCPs ──────────────────────────────────────────────────
+restart:
+	$(COMPOSE) restart

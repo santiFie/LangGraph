@@ -41,6 +41,10 @@ class Config:
     CHUNK_OVERLAP: int = 200
     EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     RETRIEVER_K: int = 5
+
+    # OpenAlex MCP
+    OPENALEX_API_KEY: str = os.getenv("OPENALEX_API_KEY", "")
+    OPENALEX_EMAIL: str = os.getenv("OPENALEX_EMAIL", "")  # Polite pool: higher rate limits
     
     # ==================== LANGCHAIN ====================
     LANGCHAIN_TRACING_V2: str = os.getenv("LANGCHAIN_TRACING_V2", "false")
@@ -96,6 +100,7 @@ class Config:
     BOTS_MODEL: str = "llama-3.3-70b-versatile"
     DSPACE_MODEL = "z-ai/glm-5.1"
     MINIO_MODEL = "openai/gpt-oss-120b"
+    OPENALEX_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 
     # ==================== MINIO CONFIG ====================
     MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/MinIO MCP"
