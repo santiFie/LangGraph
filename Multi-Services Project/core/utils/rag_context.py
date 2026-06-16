@@ -1,24 +1,26 @@
 """
-RAG context retriever for the Planner — dual-index architecture.
+RAG context retriever for the Planner — playbook-only, source-level aggregation.
 
-Two independent FAISS vector stores are built and queried in parallel:
+Architecture
+------------
+Only ONE FAISS vector store is built, over ``playbooks/``.  The retrieval
+strategy is **source-level aggregation**:
 
-1. **Agent RAG** (`agent_docs/`)
-   One Markdown file per agent, describing *only* its capabilities and
-   constraints (no cross-agent workflows).  This lets the Planner know
-   *what each agent can do* and which one to pick for a task.
+1. Run a standard similarity search to get the top-K *chunks* from the index.
+2. Group chunks by their ``source`` metadata key (one entry per .md file).
+3. Keep the best (lowest-distance) score for each unique playbook.
+4. Select the top-N most-relevant playbooks.
+5. Load the **complete** .md file for each selected playbook from disk.
+6. Inject the full documents into the Planner's prompt.
 
-2. **Playbook RAG** (`playbooks/`)
-   One Markdown file per workflow/task type (e.g. "upload file to MinIO",
-   "DSpace export → MinIO").  These define *how* multi-step, multi-agent
-   flows should be structured, including sequencing, prerequisites, and
-   critical parameters.
+This guarantees the Planner always receives intact, sequential workflow
+procedures rather than isolated mid-document fragments.  It also naturally
+handles multi-step requests that span two or more playbooks (e.g. "edit
+DSpace metadata AND upload the result to MinIO").
 
-Both stores are cached (built once per process) and queried independently.
-Their results are combined into a single ``domain_context`` string that is
-injected into the Planner's prompt.
+Agent capabilities are NOT retrieved via RAG; they are embedded statically
+in the Planner's system prompt inside ``graph_plan.py``.
 
-Adding a new agent:  drop a ``<agent_name>.md`` in ``agent_docs/``.
 Adding a new workflow: drop a ``<workflow_name>.md`` in ``playbooks/``.
 No code changes needed.
 """
@@ -26,47 +28,55 @@ No code changes needed.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.faiss import DistanceStrategy
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
 # Directory paths
-_MODULE_DIR = Path(__file__).resolve().parent          # core/utils/
-_PROJECT_ROOT = _MODULE_DIR.parent.parent              # Multi-Services Project/
-AGENT_DOCS_DIR = _PROJECT_ROOT / "agent_docs"
-PLAYBOOKS_DIR  = _PROJECT_ROOT / "playbooks"
+# ---------------------------------------------------------------------------
+_MODULE_DIR   = Path(__file__).resolve().parent   # core/utils/
+_PROJECT_ROOT = _MODULE_DIR.parent.parent          # Multi-Services Project/
+PLAYBOOKS_DIR = _PROJECT_ROOT / "playbooks"
 
-# Embedding model (reused by both stores)
+# ---------------------------------------------------------------------------
+# Model config
+# ---------------------------------------------------------------------------
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
+# ---------------------------------------------------------------------------
 # Chunking / retrieval config
-CHUNK_SIZE    = 800
-CHUNK_OVERLAP = 100
-AGENT_K       = 4   # chunks to retrieve from the agent-docs index per query
-PLAYBOOK_K    = 3   # chunks to retrieve from the playbook index per query
+# ---------------------------------------------------------------------------
+CHUNK_SIZE          = 800   # chars per chunk used for building the index
+CHUNK_OVERLAP       = 100
+CANDIDATE_K         = 15    # how many chunks to pull from FAISS initially
+TOP_N_PLAYBOOKS     = 2     # max unique playbooks to inject into the prompt
+# Maximum Euclidean distance for a playbook to be considered relevant.
+# Set to None to disable threshold filtering (always inject TOP_N_PLAYBOOKS).
+SCORE_THRESHOLD: float | None = 1.2
 
 
-# Helpers
-def _load_markdown_docs(docs_dir: Path, doc_type: str) -> list[Document]:
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _load_playbook_chunks(docs_dir: Path) -> list[Document]:
     """Load all ``*.md`` files in *docs_dir* and split them into chunks.
 
-    Each chunk gets ``source`` (filename stem) and ``doc_type`` metadata keys.
-
-    Args:
-        docs_dir: Directory containing the Markdown files.
-        doc_type: Label injected into metadata (``"agent"`` or ``"playbook"``).
+    Chunks are used exclusively to build the similarity index; the Planner
+    receives the full source documents, not these chunks.
     """
     if not docs_dir.exists():
         raise FileNotFoundError(
-            f"{doc_type} docs directory not found at: {docs_dir}\n"
+            f"Playbooks directory not found at: {docs_dir}\n"
             f"Create it and add Markdown files there."
         )
 
@@ -94,12 +104,12 @@ def _load_markdown_docs(docs_dir: Path, doc_type: str) -> list[Document]:
         for doc in char_splits:
             doc.metadata["source"]   = md_file.stem
             doc.metadata["file"]     = md_file.name
-            doc.metadata["doc_type"] = doc_type
+            doc.metadata["doc_type"] = "playbook"
 
         all_docs.extend(char_splits)
-        logger.debug("Loaded %d chunks from %s (%s)", len(char_splits), md_file.name, doc_type)
+        logger.debug("Indexed %d chunks from %s", len(char_splits), md_file.name)
 
-    logger.info("Total %s chunks loaded: %d", doc_type, len(all_docs))
+    logger.info("Total playbook chunks indexed: %d", len(all_docs))
     return all_docs
 
 
@@ -115,114 +125,162 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
 
 
 @lru_cache(maxsize=1)
-def _build_agent_vectorstore() -> FAISS:
-    """Build and cache the FAISS index for agent capability docs."""
-    logger.info("Building agent-docs vector store from: %s", AGENT_DOCS_DIR)
-    docs = _load_markdown_docs(AGENT_DOCS_DIR, "agent")
-    store = FAISS.from_documents(docs, _get_embeddings(), distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE)
-    logger.info("Agent vector store ready (%d vectors).", store.index.ntotal)
-    return store
-
-
-@lru_cache(maxsize=1)
 def _build_playbook_vectorstore() -> FAISS:
     """Build and cache the FAISS index for workflow playbooks."""
     logger.info("Building playbook vector store from: %s", PLAYBOOKS_DIR)
-    docs = _load_markdown_docs(PLAYBOOKS_DIR, "playbook")
-    store = FAISS.from_documents(docs, _get_embeddings(), distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE)
+    docs  = _load_playbook_chunks(PLAYBOOKS_DIR)
+    store = FAISS.from_documents(
+        docs,
+        _get_embeddings(),
+        distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
+    )
     logger.info("Playbook vector store ready (%d vectors).", store.index.ntotal)
     return store
 
 
-def _format_chunks(docs: list[Document]) -> list[str]:
-    """Format retrieved chunks as Markdown sections with source label."""
-    sections: list[str] = []
-    for doc in docs:
-        source = doc.metadata.get("source", "unknown")
-        header_trail = " > ".join(
-            v for k, v in doc.metadata.items()
-            if k in ("h1", "h2", "h3") and v
-        )
-        label = f"[{source}]" + (f" {header_trail}" if header_trail else "")
-        sections.append(f"### {label}\n{doc.page_content.strip()}")
-    return sections
+def _select_top_playbooks(query: str) -> list[str]:
+    """Return the stems of the most relevant playbook files for *query*.
 
-
-# Retriever
-def retrieve_planner_context(
-    query: str,
-    agent_k: int = AGENT_K,
-    playbook_k: int = PLAYBOOK_K,
-) -> str:
-    """Return a combined context string for the Planner.
-
-    Queries both the agent-docs and playbook RAG indexes in parallel and
-    combines their results into a single formatted string ready to be
-    injected into the Planner's ``domain_context`` field.
-
-    Args:
-        query:      The raw user request (same string sent to the Planner).
-        agent_k:    Number of chunks to retrieve from the agent-docs index.
-        playbook_k: Number of chunks to retrieve from the playbook index.
-
-    Returns:
-        A formatted Markdown string, or an empty string if both retrievals
-        fail (so the planner can still run without context — graceful degradation).
+    Steps
+    -----
+    1. Pull ``CANDIDATE_K`` chunks from FAISS (Euclidean distance).
+    2. For each unique ``source``, keep the **minimum** distance score
+       (lower = more similar).
+    3. Sort sources by score ascending and keep the top ``TOP_N_PLAYBOOKS``
+       whose score is below ``SCORE_THRESHOLD`` (if set).
     """
-    agent_sections:    list[str] = []
-    playbook_sections: list[str] = []
-    agent_sources:     set[str]  = set()
-    playbook_sources:  set[str]  = set()
+    store = _build_playbook_vectorstore()
 
-    # --- Agent RAG ---
-    try:
-        agent_store = _build_agent_vectorstore()
-        agent_docs = agent_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"k": agent_k},
-            #search_kwargs={"k": agent_k, "score_threshold": 0.35},
-        ).invoke(query)
-        if agent_docs:
-            agent_sections = _format_chunks(agent_docs)
-            agent_sources  = {d.metadata.get("source", "unknown") for d in agent_docs}
-        else:
-            logger.warning("No agent-docs context found for query: %s", query[:80])
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Agent RAG retrieval failed: %s", exc, exc_info=True)
+    # similarity_search_with_score returns (Document, score) tuples.
+    # With EUCLIDEAN_DISTANCE, lower score → closer → more relevant.
+    candidates = store.similarity_search_with_score(query, k=CANDIDATE_K)
 
-    # --- Playbook RAG ---
+    if not candidates:
+        logger.warning("FAISS returned no candidates for query: %s", query[:80])
+        return []
+
+    # Aggregate: best (min) score per source document
+    best_score: dict[str, float] = defaultdict(lambda: float("inf"))
+    for doc, score in candidates:
+        src = doc.metadata.get("source", "unknown")
+        if score < best_score[src]:
+            best_score[src] = score
+
+    # Sort by score (ascending = most relevant first)
+    ranked = sorted(best_score.items(), key=lambda x: x[1])
+    logger.debug("Ranked playbooks: %s", ranked)
+
+    # Apply optional threshold filter
+    if SCORE_THRESHOLD is not None:
+        ranked = [(src, s) for src, s in ranked if s <= SCORE_THRESHOLD]
+
+    selected = [src for src, _ in ranked[:TOP_N_PLAYBOOKS]]
+    logger.info("Selected playbooks for injection: %s", selected)
+    return selected
+
+
+def _load_full_playbook(stem: str) -> Document | None:
+    """Load the complete .md file for *stem* from PLAYBOOKS_DIR."""
+    path = PLAYBOOKS_DIR / f"{stem}.md"
+    if not path.exists():
+        logger.error("Playbook file not found: %s", path)
+        return None
+    content = path.read_text(encoding="utf-8")
+    return Document(
+        page_content=content,
+        metadata={"source": stem, "file": path.name, "doc_type": "playbook"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def retrieve_planner_context(query: str) -> str:
+    """Return a playbook context string for the Planner.
+
+    Selects the most relevant playbooks for *query* via source-level
+    aggregation and returns their **full content** formatted as a Markdown
+    section ready to be injected into the Planner's prompt.
+
+    Returns an empty string if no relevant playbooks are found.
+    """
     try:
-        playbook_store = _build_playbook_vectorstore()
-        playbook_docs = playbook_store.as_retriever(
-            search_type="similarity_score_threshold",
-            search_kwargs={"k": playbook_k, "score_threshold": 0.45},
-        ).invoke(query)
-        if playbook_docs:
-            playbook_sections = _format_chunks(playbook_docs)
-            playbook_sources  = {d.metadata.get("source", "unknown") for d in playbook_docs}
-        else:
-            logger.warning("No playbook context found for query: %s", query[:80])
-    except Exception as exc:  # noqa: BLE001
+        selected_stems = _select_top_playbooks(query)
+    except Exception as exc:
         logger.error("Playbook RAG retrieval failed: %s", exc, exc_info=True)
-
-    # --- Combine ---
-    if not agent_sections and not playbook_sections:
         return ""
 
-    parts: list[str] = ["## Relevant Context (retrieved from knowledge base)\n"]
+    if not selected_stems:
+        logger.warning("No relevant playbooks found for query: %s", query[:80])
+        return ""
 
-    if agent_sections:
-        agents_mentioned = ", ".join(sorted(agent_sources))
-        parts.append(
-            f"### 🤖 Agent Capabilities *(agents: {agents_mentioned})*\n\n"
-            + "\n\n".join(agent_sections)
-        )
+    playbook_docs: list[Document] = []
+    for stem in selected_stems:
+        doc = _load_full_playbook(stem)
+        if doc:
+            playbook_docs.append(doc)
 
-    if playbook_sections:
-        playbooks_mentioned = ", ".join(sorted(playbook_sources))
-        parts.append(
-            f"### 📋 Workflow Playbooks *(playbooks: {playbooks_mentioned})*\n\n"
-            + "\n\n".join(playbook_sections)
-        )
+    if not playbook_docs:
+        return ""
 
-    return "\n\n".join(parts) + "\n"
+    # Format as a clearly delimited context block
+    parts: list[str] = [
+        "## Workflow Playbooks (retrieved from knowledge base)\n",
+        f"*Matched playbooks: {', '.join(selected_stems)}*\n",
+    ]
+
+    for doc in playbook_docs:
+        parts.append(f"\n---\n\n{doc.page_content.strip()}\n")
+
+    return "\n".join(parts) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (for manual testing)
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+
+    parser = argparse.ArgumentParser(
+        description="Test the Planner Context Retriever (playbook-only, source-level)."
+    )
+    parser.add_argument("query", type=str, help="User query / task description.")
+    parser.add_argument(
+        "--top_n",
+        type=int,
+        default=TOP_N_PLAYBOOKS,
+        help=f"Max playbooks to inject (default: {TOP_N_PLAYBOOKS}).",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=SCORE_THRESHOLD,
+        help=f"Max Euclidean distance for relevance (default: {SCORE_THRESHOLD}).",
+    )
+    args = parser.parse_args()
+
+    # Allow CLI overrides
+    import core.utils.rag_context as _self
+    _self.TOP_N_PLAYBOOKS = args.top_n
+    _self.SCORE_THRESHOLD = args.threshold
+
+    print("\n" + "=" * 60)
+    print(f"🔍 Query: '{args.query}'")
+    print(f"📊 top_n={args.top_n} | threshold={args.threshold}")
+    print("=" * 60 + "\n")
+
+    result = retrieve_planner_context(args.query)
+
+    if result:
+        print(result)
+    else:
+        print("⚠️  No relevant playbooks found.")

@@ -1,23 +1,13 @@
-# Searcher Agent
+# name
+searcher_agent
 
-## Descripción General
+# description
+Agent specialized in information retrieval combining real-time web search and local RAG over a PDF collection focused on Deep Learning and Data Mining (Ian Goodfellow, François Chollet, Michael Nielsen, university course materials on neural networks, CNNs, autoencoders, GANs). Uses Tavily for live web queries and a FAISS-based retriever for the local PDF collection. Includes a self-critique loop with an academic reviewer to validate response quality before returning.
 
-El `searcher_agent` (también llamado `researcher_agent`) es un agente especializado en recuperación de información. Combina búsqueda en internet con recuperación de documentos locales mediante RAG (Retrieval-Augmented Generation) sobre una colección de PDFs de Deep Learning y Minería de Datos.
+Best suited for conceptual questions ("what is X?", "how does Y work?") or research queries. For real-time or current information, it prioritizes web search over local RAG. Completely independent of DSpace, MinIO, GitHub, Bots, and OpenAlex.
 
----
+# inputs
+- task: string — Information retrieval query (e.g., "Explain how transformers work", "Search for recent news about LLMs", "What is backpropagation?", "Find information about GANs"). Can be in any language.
 
-## Capacidades
-
-- **Búsqueda web en tiempo real** usando Tavily para consultas sobre temas generales, noticias recientes o documentación online.
-- **Recuperación de documentos PDF locales** mediante RAG: busca en una colección de PDFs de Machine Learning/Deep Learning (textos de Ian Goodfellow, François Chollet, Michael Nielsen, y material de cursos universitarios sobre redes neuronales, CNN, autoencoders, GANs, etc.).
-- **Síntesis de información**: Combina resultados de múltiples fuentes para generar respuestas completas y con citas.
-
----
-
-## Restricciones y Notas
-
-- Este agente es **completamente independiente** del resto (DSpace, MinIO, GitHub, Bots). No comparte archivos ni recursos con ellos.
-- No puede ejecutar código, modificar archivos ni interactuar con APIs externas más allá de la búsqueda web.
-- Es el agente más adecuado para preguntas del tipo "¿qué es...?", "¿cómo funciona...?", "busca información sobre...".
-- La colección de PDFs está orientada a **Deep Learning y Minería de Datos**; para otros dominios técnicos, usa la búsqueda web.
-- Si la pregunta requiere información actual o en tiempo real, prioriza Tavily sobre el RAG local.
+# outputs
+- result: string — Synthesized, citation-backed response combining results from web search and/or local RAG. Responds in the same language as the input query.

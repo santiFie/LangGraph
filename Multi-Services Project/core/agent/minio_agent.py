@@ -8,6 +8,7 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from core.utils.config import config
+from core.utils.prompt_loader import load_agent_prompt
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
 
@@ -55,18 +56,7 @@ async def build_minio_workflow(tools):
         """Node function for Minio operations"""
         messages = state["messages"]
 
-        system_message = SystemMessage(content=f"""
-        You are the Storage Management Agent for the service orchestrator. Your primary responsibility is to manage files and objects using the provided MinIO tools.
-
-        CRITICAL INSTRUCTIONS:
-        1. Tool Usage: Always use the appropriate MinIO tool to list, read, upload, update, or delete files based on the orchestrator's needs. Do not guess file locations or structures.
-        2. Precision: When retrieving or saving data, ensure the bucket names and object paths (keys) are correct.
-        3. Data Governance: Treat all files as critical system data. Confirm successful operations before proceeding to the next node in the graph.
-        4. Output Format: Always provide a clear summary of the action taken (e.g., "Successfully uploaded 'report.csv' to bucket 'analytics'"). If an operation fails, return the exact error message so the orchestrator can handle the exception.
-        5. File Handling: The tools you use run inside a Docker container. Inside this container, the shared staging directory is mounted EXACTLY at the path '/Downloads'. When a tool asks for a file path, you MUST use '/Downloads/filename' (e.g., '/Downloads/.gitignore'). DO NOT use host paths or invent directories like /shared/.
-        Context: You operate within an agentic graph workflow. Act efficiently and only invoke tools when strictly necessary to fulfill the requested task.
-                                       
-        """)
+        system_message = SystemMessage(content=load_agent_prompt("minio_agent"))
         
         prompt = [system_message] + messages
         response = await minio_model.ainvoke(prompt)

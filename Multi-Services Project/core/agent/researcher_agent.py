@@ -18,6 +18,7 @@ from langgraph.graph.message import add_messages
 from core.tools.retriever import generate_retriever
 from core.tools.tavily import generate_tavily
 from core.utils.config import config
+from core.utils.prompt_loader import load_agent_prompt
 
 
 class SearcherAgentState(TypedDict):
@@ -62,16 +63,7 @@ def build_searcher_graph():
         - Uses retriever_tool for technical concepts
         - Uses tavily_tool for general information
         """
-        AUTHOR_PROMPT = SystemMessage(content="""You are an expert in Deep Learning and Service Orchestration.
-            Your task is to answer technical queries with precision.
-
-            GOLDEN RULES:
-            1. First time answering: Use 'deep-learning-rag-retriever' for technical concepts 
-            and 'tavily_search_results' for general information.
-            2. If you receive a CRITIQUE from the reviewer: Do NOT use tools again. Adjust your previous answer.
-            3. Format: Do not mention you are an AI or being evaluated. Deliver the final answer directly.
-            4. Language: Always respond in the user's language.
-        """)
+        AUTHOR_PROMPT = SystemMessage(content=load_agent_prompt("searcher_agent"))
 
         prompt = [AUTHOR_PROMPT] + state["messages"]
 

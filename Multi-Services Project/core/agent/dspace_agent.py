@@ -1,6 +1,7 @@
 from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from core.utils.config import Config
+from core.utils.prompt_loader import load_agent_prompt
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.graph import StateGraph, START, END
@@ -66,14 +67,7 @@ async def build_dspace_agent_workflow(tools):
             top_p=0.9,    
         ).bind_tools(tools=filetered_tools)
 
-        sys_msg = SystemMessage(content=(
-            "You are an expert assistant for managing DSpace repositories. "
-            "Your goal is to help users interact with DSpace by using the available tools. "
-            "You can search, list, create and update communities, collections, and items. "
-            "You can also export collection metadata as CSV. "
-            "All operations require admin-level access, which is handled automatically. "
-            "UUIDs are used to identify all DSpace objects."
-        ))
+        sys_msg = SystemMessage(content=load_agent_prompt("dspace_agent"))
         prompt = [sys_msg] + state["messages"]
         response = await dspace_model.ainvoke(prompt)
 

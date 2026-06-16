@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from core.utils.config import config
 from core.utils.rag_context import retrieve_planner_context
+from core.utils.local_rag_context import retrieve_planner_context_local
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
 AgentName = Literal["github", "dspace", "minio", "bots", "searcher", "openalex"]
@@ -176,55 +177,98 @@ async def create_supervisor_graph(persistence_saver):
     Each step must represent a single, discrete task and MUST be assigned to the most appropriate specialized agent.
     If a process involves multiple distinct actions (e.g., downloading a file and then uploading it), you must split it into separate steps.
 
-    You have access to the following specialized agents. You must strictly assign one of these exact names to the 'assigned_agent' field:
+    ## Available Agents
 
-    - 'searcher': Handles document retrieval related to deep learning and general internet searches.
-    - 'bots': Specialized in analyzing bot attack logs.
-    - 'github': Manages GitHub repositories and handles local filesystem operations. Use this agent if a file needs to be read, created, moved, or prepared into the {DOWNLOADS_DIR} directory.
-    - 'dspace': Administrates SEDICI (DSpace) institutional repositories.
-    - 'minio': Manages MinIO object/file storage. CRITICAL CONSTRAINT: This agent operates in total isolation.
-               It can ONLY read or write files that are already inside its internal '/Downloads' mount (which maps to the host's {DOWNLOADS_DIR}).
-               It absolutely cannot access files outside this directory.
-    - 'openalex': Manages the retrieval of academic papers, authors, and institutional information using the OpenAlex database.
+    You must strictly assign one of these exact names to the 'assigned_agent' field:
 
-    ### Context Provided to You
-    The user message includes a "Domain Context" section with two parts:
-    - **🤖 Agent Capabilities**: Describes what each agent can do and its constraints. Use this to decide which agent to assign to each step.
-    - **📋 Workflow Playbooks**: Describes step-by-step patterns for common multi-agent workflows (e.g., uploading to MinIO, exporting from DSpace). Use these as a blueprint when the user's request matches a known pattern.
+    ### `searcher`
+    Specialized in information retrieval combining real-time web search and local RAG over a PDF collection
+    focused on Deep Learning and Data Mining. Uses Tavily for live web queries and a
+    FAISS-based retriever for the local collection.
+    Completely independent of DSpace, MinIO, GitHub, Bots, and OpenAlex.
+    - INPUT: task string — e.g. "Explain how transformers work", "Find recent news about LLMs".
+    - OUTPUT: Synthesized, citation-backed response from web and/or local RAG.
 
+    ### `bots`
+    Specialized in bot detection. Connects to a Bot Detection MCP server that maintains a database of IPs classified as bots.
+    Exclusive agent for any query about banned IPs, bot traffic analysis, or IP reputation checks.
+    Completely independent from DSpace, MinIO, GitHub, and OpenAlex.
+    - INPUT: task string — e.g. "List all permanently banned IPs", "Check if IP 1.2.3.4 is a bot".
+    - OUTPUT: IP status, ban reasons, active timeframes, or paginated lists of banned IPs.
+
+    ### `github`
+    Specialized in GitHub remote operations and local filesystem management. Acts as the "file bridge"
+    It can: read, create, edit, move, list files on the local host filesystem; interact with GitHub
+    repositories (list repos, read/write remote files, create issues and PRs).
+    NEVER interacts with MinIO, DSpace, or Bots directly.
+    - INPUT: task string — e.g. "Copy file report.csv to {DOWNLOADS_DIR}", "List files in /data/".
+    - OUTPUT: Confirmation of operation, file contents, directory listings, or error details.
+
+    ### `dspace`
+    Administrates SEDICI, the institutional repository based on DSpace. Can create, update, import, export, and delete communities, collections, items, and manage bitstreams.
+    - INPUT: task string — e.g. "Export collection UUID xxxx to CSV", "List items in collection named X".
+    - OUTPUT: UUIDs, item metadata, export file path on DSpace server, import status, or structured lists.
+
+    ### `minio`
+    Manages object storage in MinIO (S3-compatible). 
+    Use for: listing buckets/objects, uploading files from /Downloads/, downloading objects to /Downloads/,
+    deleting objects, creating new buckets.
+    - INPUT: task string — e.g. "Upload /Downloads/report.csv to bucket analytics", "List all buckets".
+    - OUTPUT: Operation confirmation, object metadata, bucket/object listings, or error messages.
+
+    ### `openalex`
+    Queries the OpenAlex academic database. Retrieves information about scientific works (articles, books,
+    pre-prints, datasets), authors (ORCID profiles, h-index, metrics), institutions (universities, ROR IDs,
+    academic output), topics (Wikidata-based fields of study), and sources (journals with ISSN-L).
+    Always resolves human-readable names (e.g. "UNLP", "MIT") to canonical OpenAlex IDs before executing
+    filter queries. Read-only. Independent of all other agents.
+    - INPUT: task string — e.g. "Find top-cited open access articles from Argentina in 2023".
+    - OUTPUT: Structured list: **Title**, Authors (max 3 + "et al."), Year/Source, Citations, DOI.
+
+    ## Workflow Playbooks
+    The user message may include a "Workflow Playbooks" section with step-by-step patterns for common
+    multi-agent workflows (e.g., DSpace export → MinIO upload, metadata editing). Use these as a blueprint
+    when the user's request matches a known pattern.
     Always prioritize playbook guidance when available — it encodes tested, correct sequences.
 
-    ### Important Planning Rules:
-    1. Dependency Management: If the goal requires the 'minio' agent to upload, read, or manipulate a file, you MUST create a prior step assigning the 'github' agent to move, download, or copy that file specifically into {DOWNLOADS_DIR}. The 'minio' agent will fail if the file is not placed there first.
-    2. Clarity: Task descriptions should be highly specific so the assigned agent knows exactly what to execute without needing the full context of the final goal.
-    3. Simplicity: Do not overcomplicate the plan. Only include the necessary steps to achieve the user's goal.
-    4. Sequential Order: Ensure the steps are in a logical sequence, especially when there are dependencies between them (e.g., a file must be prepared by 'github' before 'minio' can upload it).
-    5. NO Presentation Steps: NEVER create a step whose sole purpose is to "present", "format", "recopilar", or "display" results to the user. That is the exclusive responsibility of the final_answer_node which runs automatically after the plan is complete. Every step in the plan MUST perform a concrete action (search, fetch, upload, filter, etc.).
+    ## Planning Rules
+    1. **Dependency Management**: If `minio` must upload a file, a prior step MUST assign `github` to
+       move/copy that file into {DOWNLOADS_DIR}. `minio` will fail without this.
+    2. **DSpace → Other Agents**: If `dspace` exports a CSV and another agent needs it, a `github` step
+       must copy it from the DSpace server path to {DOWNLOADS_DIR} before any other agent can use it.
+    3. **Clarity**: Task descriptions must be highly specific. The assigned agent must know exactly what
+       to execute without needing the full goal context.
+    4. **Simplicity**: Only include steps necessary to achieve the user's goal. No redundant steps.
+    5. **Sequential Order**: Ensure logical sequencing, especially for file-dependency chains.
+    6. **NO Presentation Steps**: NEVER create a step whose sole purpose is to "present", "format",
+       "recopilar", or "display" results. That is handled automatically by the final_answer_node.
+       Every step MUST perform a concrete action (search, fetch, upload, edit, filter, etc.).
     """
 
     planner_prompt = ChatPromptTemplate.from_messages([
         SystemMessage(content=planner_system_prompt),
         ("user",
          "## User Request\n{input}\n\n"
-         "{domain_context}"
+         "## Workflow Playbooks\n{domain_context}"
         )
     ])
 
     planner_chain = planner_prompt | planner_llm.with_structured_output(Plan)
 
-    def rag_context_node(state: PlanExecuteState) -> dict:
-        """Retrieves relevant workflow context from agent docs and populates domain_context."""
+    async def rag_context_node(state: PlanExecuteState) -> dict:
+        """Retrieves relevant workflow playbooks and injects them into domain_context."""
         context = retrieve_planner_context(state["input"])
+        #context = await retrieve_planner_context_local(state["input"])
         return {"domain_context": context}
 
-    def planner_node(state: PlanExecuteState):
-        plan = planner_chain.invoke({
+    async def planner_node(state: PlanExecuteState):
+        plan = await planner_chain.ainvoke({
             "input": state["input"],
             "domain_context": state.get("domain_context") or "",
         })
         return {"plan": plan.steps}
     
-    def replan_node(state: PlanExecuteState):
+    async def replan_node(state: PlanExecuteState):
         """Evalúa el progreso, remueve las tareas completadas y devuelve las pendientes."""
         previous_plan = state["plan"]
         past_steps = state.get("past_steps", [])
@@ -260,7 +304,7 @@ async def create_supervisor_graph(persistence_saver):
         Output the updated list of steps containing ONLY the tasks that still need to be executed:"""
 
         structured_llm = planner_llm.with_structured_output(Plan)
-        new_plan = structured_llm.invoke(replan_prompt)
+        new_plan = await structured_llm.ainvoke(replan_prompt)
     
         return {"plan": new_plan.steps}
 

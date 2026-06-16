@@ -15,6 +15,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.graph.message import add_messages
 from core.utils.config import config
+from core.utils.prompt_loader import load_agent_prompt
 
 
 class GithubState(TypedDict):
@@ -42,29 +43,12 @@ async def build_github_workflow(tools):
     async def github_agent_node(state: GithubState):
         """Agent node that handles GitHub operations"""
         
-        WORKSPACE_PATH = config.WORKSPACE_PATH
-        DEFAULT_REPO = config.DEFAULT_GITHUB_REPO
-        
-        sys_msg = f"""# ROLE
-        You are a Senior Platform Engineer specialist in GitHub and filesystem operations.
-
-        # CONTEXT
-        - **Root Path:** {WORKSPACE_PATH}
-        - **Primary Repository:** {DEFAULT_REPO}
-        - **Shared Downloads Directory:** {config.DOWNLOADS_DIR}
-
-        # OPERATIONAL GUIDELINES
-        1. **Tool Selection:** - Use `filesystem` tools for local operations
-        - Use `github` tools ONLY for remote repository interactions
-        2. **Path Resolution:** If only a filename is provided, use directory listing tools.
-        3. **Commit Messages:** NEVER generate, guess, or placeholder a commit message.
-
-        # MULTI-AGENT PIPELINE CONSTRAINTS (CRITICAL)
-        - You work in a pipeline managed by a Supervisor. 
-        - If the task mentions uploading to MinIO, DSpace, or other systems outside your scope, DO NOT TRY TO INTERACT WITH THEM.
-        - Your ONLY job in those cases is to COPY or PREPARE the requested file into the shared directory: {config.DOWNLOADS_DIR}.
-        - Once you have successfully copied the file to {config.DOWNLOADS_DIR}, respond CONFIRMING only that the file is ready in that directory. Do not say you cannot help with MinIO; just say: "File [name] has been successfully copied to the shared downloads directory."
-        """
+        sys_msg = load_agent_prompt(
+            "github_agent",
+            WORKSPACE_PATH=config.WORKSPACE_PATH,
+            DEFAULT_REPO=config.DEFAULT_GITHUB_REPO,
+            DOWNLOADS_DIR=config.DOWNLOADS_DIR,
+        )
         prompt = [SystemMessage(content=sys_msg)] + state["messages"]
         
         if state.get("commit_message"):

@@ -77,6 +77,7 @@ class Config:
     # ==================== ORCHESTRATOR ====================
     ORCHESTRATOR_API_KEY: str = os.getenv("ORCHESTRATOR_API_KEY", "")
     ORCHESTRATOR_BASE_URL: str = os.getenv("ORCHESTRATOR_BASE_URL", "")
+    ORCHESTRATOR_PASSWORD: str = os.getenv("ORCHESTRATOR_PASSWORD", "")
     ORCHESTRATOR_LOCAL_API_KEY: str = os.getenv("ORCHESTRATOR_LOCAL_API_KEY", "")
     ORCHESTRATOR_BASE_URL_LOCAL: str = os.getenv("ORCHESTRATOR_BASE_URL_LOCAL", "")
 

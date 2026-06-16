@@ -1,29 +1,13 @@
-# MinIO Agent
+# name
+minio_agent
 
-## Descripción General
+# description
+Agent that manages object storage in MinIO (S3-compatible). Operates through a Docker-based MCP server with a critical isolation constraint: its container only mounts `DOWNLOADS_DIR` as `/Downloads` internally. The agent can ONLY read or write files already inside `/Downloads`. Any file to be uploaded MUST first be placed in `DOWNLOADS_DIR` by the `github_agent` in a prior plan step, otherwise the operation will fail.
 
-El `minio_agent` gestiona el almacenamiento de objetos en MinIO, una solución de object storage compatible con S3. El agente interactúa con MinIO a través de un servidor MCP que corre dentro de un contenedor Docker.
+Use this agent for listing buckets and objects, uploading files from `/Downloads/`, downloading objects to `/Downloads/`, deleting objects, and creating new buckets.
 
-**RESTRICCIÓN CRÍTICA DE AISLAMIENTO:**  
-El agente MinIO opera en total aislamiento. Su contenedor Docker tiene montado **únicamente** el directorio `DOWNLOADS_DIR` del host como `/Downloads` interno. El agente **solo puede leer o escribir archivos que ya se encuentren en `/Downloads`**. No puede acceder a ninguna otra ruta del host ni del sistema de archivos del orquestador.
+# inputs
+- task: string — MinIO storage operation (e.g., "Upload /Downloads/report.csv to bucket analytics", "List all buckets", "Download object X from bucket Y to /Downloads/", "Create bucket named Z"). Files MUST already be in /Downloads/ before upload.
 
----
-
-## Capacidades
-
-- **Listar** buckets y objetos dentro de un bucket.
-- **Subir** archivos desde `/Downloads/<archivo>` a un bucket de MinIO.
-- **Descargar** objetos de MinIO hacia `/Downloads/<archivo>`.
-- **Eliminar** objetos o buckets.
-- **Crear** nuevos buckets.
-- **Obtener información** de un objeto (tamaño, metadatos, fecha de modificación).
-- **Obtener la ruta del host** que está mapeada a `/Downloads` (herramienta `get_host_downloads_dir`), útil para coordinar con otros agentes.
-
----
-
-## Restricciones
-
-- **Toda ruta de archivo debe usar el prefijo `/Downloads/`**, nunca rutas del host ni del sistema de archivos externo.
-- Si el archivo que se necesita subir **no está en `DOWNLOADS_DIR`**, el plan SIEMPRE debe incluir un paso previo del agente `github` para moverlo allí. De lo contrario, el agente fallará.
-- El servidor MinIO corre en `localhost:9003` con autenticación por access key / secret key (configurado automáticamente).
-- No tiene relación con operaciones de DSpace, GitHub o Bots directamente.
+# outputs
+- result: string — Operation confirmation (e.g., "Successfully uploaded report.csv to bucket analytics"), object metadata, bucket/object listings, or exact error messages on failure.
