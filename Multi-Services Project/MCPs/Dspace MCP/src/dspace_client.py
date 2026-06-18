@@ -128,6 +128,9 @@ class DSpaceClient:
         resp.raise_for_status()
         if stream:
             return resp  # Return raw response for binary/streaming content
+        # 204 No Content — return empty dict (used by search/item endpoints)
+        if resp.status_code == 204 or not resp.content:
+            return {}
         return resp.json()
 
     def get_content(self, path: str) -> bytes:
@@ -181,3 +184,62 @@ class DSpaceClient:
         if resp.content and resp.headers.get("Content-Type", "").startswith("application/json"):
             return resp.json()
         return {"status_code": resp.status_code}
+
+    def patch(self, path: str, json: list | None = None,
+              extra_headers: dict | None = None) -> Any:
+        """Perform a PATCH request (JSON-Patch) with CSRF token. Re-authenticates once on 401."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {
+            "X-XSRF-TOKEN": self._csrf(),
+            "Content-Type": "application/json",
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+
+        resp = self.session.patch(url, json=json, headers=headers)
+        if resp.status_code == 401:
+            self._relogin()
+            headers["X-XSRF-TOKEN"] = self._csrf()
+            resp = self.session.patch(url, json=json, headers=headers)
+        resp.raise_for_status()
+
+        if resp.content and resp.headers.get("Content-Type", "").startswith("application/json"):
+            return resp.json()
+        return {"status_code": resp.status_code}
+
+    def delete(self, path: str, params: dict | None = None) -> None:
+        """Perform a DELETE request with CSRF token. Re-authenticates once on 401."""
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {"X-XSRF-TOKEN": self._csrf()}
+
+        resp = self.session.delete(url, params=params, headers=headers)
+        if resp.status_code == 401:
+            self._relogin()
+            headers["X-XSRF-TOKEN"] = self._csrf()
+            resp = self.session.delete(url, params=params, headers=headers)
+        resp.raise_for_status()
+
+    def post_uri_list(self, path: str, uri: str) -> Any:
+        """
+        Perform a POST with Content-Type: text/uri-list body.
+        Used by DSpace to:
+          - Submit a workspace item to workflow (POST /api/workflow/workflowitems)
+          - Claim a pool task (POST /api/workflow/claimedtasks)
+        Returns the parsed JSON body, or an empty dict for 204 No Content responses.
+        """
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        headers = {
+            "X-XSRF-TOKEN": self._csrf(),
+            "Content-Type": "text/uri-list",
+        }
+
+        resp = self.session.post(url, data=uri, headers=headers)
+        if resp.status_code == 401:
+            self._relogin()
+            headers["X-XSRF-TOKEN"] = self._csrf()
+            resp = self.session.post(url, data=uri, headers=headers)
+        resp.raise_for_status()
+
+        if resp.content and resp.headers.get("Content-Type", "").startswith("application/json"):
+            return resp.json()
+        return {}

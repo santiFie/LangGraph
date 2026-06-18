@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 def register_all(mcp: "FastMCP", client: "DSpaceClient") -> None:
     """Register all DSpace tools on the given FastMCP instance."""
-    from tools import search, communities, collections, items, epersons, export
+    from tools import search, communities, collections, items, epersons, export, workflow
 
     search.register(mcp, client)
     communities.register(mcp, client)
@@ -24,3 +24,4 @@ def register_all(mcp: "FastMCP", client: "DSpaceClient") -> None:
     items.register(mcp, client)
     epersons.register(mcp, client)
     export.register(mcp, client)
+    workflow.register(mcp, client)

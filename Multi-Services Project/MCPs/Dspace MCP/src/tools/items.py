@@ -153,10 +153,16 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         discoverable: bool | None = None,
     ) -> dict[str, Any]:
         """
-        Update an existing item's metadata via a full PUT replacement.
+        Update an existing ARCHIVED item's metadata via a full PUT replacement.
 
         WARNING: This replaces the complete metadata. Fields not included will be removed.
         Fetch the current item with get_item() first if you only want to change specific fields.
+
+        IMPORTANT: This tool only works for items that are already in the archive
+        (inArchive=True). Items that are in the submission workspace or under workflow
+        review CANNOT be updated via this endpoint — DSpace will return a 500 error.
+        Use update_workspace_item() for workspace drafts or the PATCH on workflowitems
+        for items under review.
 
         Args:
             uuid: UUID of the item to update.
@@ -171,6 +177,21 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
             current = client.get(f"/api/core/items/{uuid}")
         except requests.HTTPError as exc:
             return {"error": f"Could not fetch current item: {exc.response.status_code}"}
+
+        # Guard: DSpace 7 raises a 500 when PUT is used on non-archived items.
+        # Items in workspace (inArchive=False, withdrawn=False) or workflow
+        # must be edited via the submission/workflow endpoints instead.
+        if not current.get("inArchive", False):
+            return {
+                "error": (
+                    f"Item {uuid} is not in the archive (inArchive=False). "
+                    "It may be in the submission workspace or under workflow review. "
+                    "Use update_workspace_item() for workspace drafts or "
+                    "get_workflow_item_by_item_uuid() to locate the workflow item."
+                ),
+                "in_archive": False,
+                "withdrawn": current.get("withdrawn"),
+            }
 
         body = {
             "uuid": uuid,
