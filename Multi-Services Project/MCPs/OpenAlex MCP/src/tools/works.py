@@ -26,7 +26,7 @@ def register(mcp: "FastMCP", client: "OpenAlexClient") -> None:
 
     @mcp.tool()
     def search_works(
-        search: str,
+        search: Optional[str] = None,
         filter: Optional[str] = None,
         select: Optional[str] = None,
         sort: Optional[str] = None,
@@ -35,10 +35,13 @@ def register(mcp: "FastMCP", client: "OpenAlexClient") -> None:
     ) -> dict[str, Any]:
         """
         Search OpenAlex works (papers, books, datasets, pre-prints, etc.) by
-        free-text or filter expression.
+        free-text query, filter expression, or both.
+
+        At least one of `search` or `filter` must be provided.
 
         Args:
-            search: Free-text title/abstract query (e.g. 'machine learning in biology').
+            search: Optional free-text title/abstract query (e.g. 'machine learning in biology').
+                    Can be omitted when `filter` alone is sufficient.
             filter: OpenAlex filter string. Examples:
                     - 'publication_year:2023'
                     - 'authorships.author.id:A2208157607'

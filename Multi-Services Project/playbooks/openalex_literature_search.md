@@ -10,6 +10,12 @@ Busca literatura científica estructurada a través de OpenAlex según criterios
 - Se necesita conocer el impacto (citas, índice h) de un autor o institución específica.
 - El usuario quiere obtener los DOIs o URLs de publicaciones académicas para revisión.
 
+## Razonamiento previo a la creación del plan
+
+- Identificar si existen campos específicos solicitados por el usuario (ej: year, publication_year).
+- Si el usuario no especifica campos, usar los campos por defecto.
+- Si se solicitan campos específicos, el plan debe incluir solamente esos campos.
+
 ## Flujo
 
 ```
@@ -23,6 +29,7 @@ Paso 1 (openalex): [BÚSQUEDA CON RESOLUCIÓN DE ENTIDAD]
                    - Si busca un artículo específico, usar título o DOI directamente.
                    - Aplicar los parámetros de paginación adecuados (ej: per_page, sort) en la misma llamada.
                    - Usar los parámetros cuando se necesiten los resultados ordenados (sort por fecha, titulo, etc.). NO HACER DOS PASOS PARA ORDENAR UN RESULTADO.
+                   - OBTENER SOLO LOS CAMPOS SOLICITADOS (NO INCLUIR CAMPOS QUE NO SEAN REQUERIDOS)
 ```
 
 > ⚠️ **Importante:** NO incluir un paso de "presentar", "recopilar" o "formatear" los resultados.

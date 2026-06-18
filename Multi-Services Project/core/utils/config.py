@@ -101,7 +101,8 @@ class Config:
     BOTS_MODEL: str = "llama-3.3-70b-versatile"
     DSPACE_MODEL = "z-ai/glm-5.1"
     MINIO_MODEL = "openai/gpt-oss-120b"
-    OPENALEX_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+    # OPENALEX_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+    OPENALEX_MODEL = "openai/gpt-oss-120b"
 
     # ==================== MINIO CONFIG ====================
     MINIO_MCP_DIR="/home/santi/Documentos/LangGraph/Multi-Services Project/MCPs/MinIO MCP"

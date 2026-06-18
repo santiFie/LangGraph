@@ -234,13 +234,11 @@ async def create_supervisor_graph(persistence_saver):
     ## Planning Rules
     1. **Dependency Management**: If `minio` must upload a file, a prior step MUST assign `github` to
        move/copy that file into {DOWNLOADS_DIR}. `minio` will fail without this.
-    2. **DSpace → Other Agents**: If `dspace` exports a CSV and another agent needs it, a `github` step
-       must copy it from the DSpace server path to {DOWNLOADS_DIR} before any other agent can use it.
-    3. **Clarity**: Task descriptions must be highly specific. The assigned agent must know exactly what
+    2. **Clarity**: Task descriptions must be highly specific. The assigned agent must know exactly what
        to execute without needing the full goal context.
-    4. **Simplicity**: Only include steps necessary to achieve the user's goal. No redundant steps.
-    5. **Sequential Order**: Ensure logical sequencing, especially for file-dependency chains.
-    6. **NO Presentation Steps**: NEVER create a step whose sole purpose is to "present", "format",
+    3. **Simplicity**: Only include steps necessary to achieve the user's goal. No redundant steps.
+    4. **Sequential Order**: Ensure logical sequencing, especially for file-dependency chains.
+    5. **NO Presentation Steps**: NEVER create a step whose sole purpose is to "present", "format",
        "recopilar", or "display" results. That is handled automatically by the final_answer_node.
        Every step MUST perform a concrete action (search, fetch, upload, edit, filter, etc.).
     """
@@ -273,39 +271,48 @@ async def create_supervisor_graph(persistence_saver):
         previous_plan = state["plan"]
         past_steps = state.get("past_steps", [])
 
-        executed_context = "\n".join([f"- Task: {step}\n  Result: {result}" for step, result in past_steps])
-        
-        # Only past steps that have results 
-        previous_tasks = "\n".join([f"- {step.task} (Assigned to: {step.assigned_agent})" for step in previous_plan])
-        
+        # Pre-compute pending tasks in Python — tasks not yet present in past_steps
+        executed_task_descriptions = {step for step, _ in past_steps}
+        pending_tasks = [
+            step for step in previous_plan
+            if step.task not in executed_task_descriptions
+        ]
+
+        executed_context = "\n".join(
+            [f"- Task: {step}\n  Result: {result}" for step, result in past_steps]
+        ) or "(none)"
+
+        pending_context = "\n".join(
+            [f"- {step.task} (Assigned to: {step.assigned_agent})" for step in pending_tasks]
+        ) or "(none — all tasks have been executed)"
+
         replan_prompt = f"""You are the Re-planner agent for a multi-agent system.
-        
+
         Original Goal: '{state['input']}'
 
-        Here is the CURRENT PLAN (which includes both pending and recently executed tasks):
-        {previous_tasks}
-
-        Here is the log of tasks that have ALREADY BEEN EXECUTED and their results:
+        ## Already Executed Tasks (DO NOT repeat these):
         {executed_context}
 
-        Your job is to update the plan based on the results above.
+        ## Pending Tasks (not yet executed):
+        {pending_context}
+
+        Your job is to decide what still needs to be done.
 
         STRICT RULES:
-        1. REMOVE tasks from the current plan that have already been successfully completed.
-        2. YOU MUST KEEP all tasks from the current plan that have NOT been executed yet. Do not drop pending tasks (like saving files, uploading, etc.).
-        3. If an executed task failed or produced an error, you must add new corrective steps before continuing with the pending tasks.
-        4. CRITICAL — Goal Completion: Return an EMPTY list of steps if ANY of the following conditions are met:
-           a) All steps in the current plan have been executed AND their results collectively satisfy the Original Goal.
-           b) The Original Goal is a pure retrieval/listing/search request (e.g., "find", "list", "show", "get", "what are") AND at least one executed step has already returned the requested data WITHOUT errors.
-           c) There are no pending tasks left in the current plan.
-           IMPORTANT: For goals of type (b), do NOT add steps to "recopilar", "presentar", "filtrar" or "display" results — those are handled automatically after the plan ends.
-        5. NEVER add steps whose sole purpose is to "present", "format", or "recopilar" results. Only add steps that perform concrete actions.
+        1. NEVER repeat a task that already appears in the "Already Executed" section.
+        2. KEEP all tasks listed under "Pending Tasks" unless they were made unnecessary by an executed result.
+        3. If an executed task produced an error, add corrective steps BEFORE the remaining pending tasks.
+        4. CRITICAL — Goal Completion: If "Pending Tasks" shows "(none — all tasks have been executed)"
+           AND none of the executed tasks produced an unrecovered error,
+           return an EMPTY list of steps immediately. Do not add any new steps.
+        5. NEVER add steps whose sole purpose is to "present", "format", "recopilar", or "display" results.
+           Those are handled automatically after the plan ends.
 
-        Output the updated list of steps containing ONLY the tasks that still need to be executed:"""
+        Output ONLY the list of tasks that still need to be executed (empty list if the goal is complete):"""
 
         structured_llm = planner_llm.with_structured_output(Plan)
         new_plan = await structured_llm.ainvoke(replan_prompt)
-    
+
         return {"plan": new_plan.steps}
 
     def create_agent_node(agent_graph):
