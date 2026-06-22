@@ -44,13 +44,17 @@ Items in progress before entering the review workflow.
 ### Workflow Items (under review — `/api/workflow/workflowitems`)
 Items submitted to the review pipeline awaiting curator/reviewer action.
 
+
 | Tool | Description |
 |---|---|
 | `list_workflow_items` | List all items currently in review |
 | `get_workflow_item` | Get a workflow item by its numeric ID |
 | `get_workflow_item_by_item_uuid` | Find the workflow item associated to a given item UUID |
 | `submit_workspace_to_workflow` | **Submit a draft to the review workflow** (key publish step) |
+| `update_workspace_item` | Patch the metadata sections of an existing workflow item |
 | `delete_workflow_item` | Return item to workspace (`expunge=False`) or delete it permanently (`expunge=True`) |
+
+
 
 ### Pool Tasks & Claimed Tasks (reviewer actions — `/api/workflow/claimedtasks`)
 Tasks assigned to reviewers; executing these is the final step to publish an item.

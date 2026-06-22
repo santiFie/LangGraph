@@ -143,6 +143,24 @@ class DSpaceClient:
         resp.raise_for_status()
         return resp.content
 
+    def get_full_url(self, url: str, params: dict | None = None) -> Any:
+        """
+        GET an absolute URL (used to follow HAL relation links).
+
+        DSpace embeds *relationship* hrefs in _links that are full absolute
+        URLs (e.g. http://host/server/api/workflow/workflowitems/42/item).
+        Those cannot be used with get() which prepends base_url.
+        Re-authenticates once on 401.
+        """
+        resp = self.session.get(url, params=params)
+        if resp.status_code == 401:
+            self._relogin()
+            resp = self.session.get(url, params=params)
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {}
+        return resp.json()
+
     def post(self, path: str, json: dict | None = None, data: dict | None = None,
              files: dict | None = None, extra_headers: dict | None = None) -> Any:
         """Perform a POST request with CSRF token. Re-authenticates once on 401."""

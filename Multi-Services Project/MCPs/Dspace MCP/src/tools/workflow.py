@@ -27,6 +27,24 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+
+class WorkspaceUpdateMetadataInput(BaseModel):
+    """
+    Defines the structure for updating the metadata of a workspace item.
+    """
+    title: Optional[str] = Field(default=None, description="Title of the document")
+    abstract: Optional[str] = Field(default=None, description="Abstract of the document")
+    authors: Optional[List[str]] = Field(default=None, description="List of authors in 'Last, First' format")
+    keywords: Optional[List[str]] = Field(default=None, description="Keywords")
+    creation_date: Optional[str] = Field(default=None, description="Creation date of the document in YYYY-MM-DD format")
+
+    
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -79,6 +97,28 @@ def _first_value(field) -> str | None:
             return entry.get("value")
         return str(entry)
     return None
+
+
+def parse_to_dspace_metadata(data: WorkspaceUpdateMetadataInput) -> dict[str, Any]:
+    """Convert a typed input schema into the DSpace JSON-Patch metadata format."""
+    metadata: dict[str, Any] = {}
+
+    if data.title:
+        metadata["dc.title"] = [{"value": data.title}]
+
+    if data.abstract:
+        metadata["dc.description.abstract"] = [{"value": data.abstract}]
+
+    if data.authors:
+        metadata["sedici.creator"] = [{"value": author} for author in data.authors]
+
+    if data.keywords:
+        metadata["dc.subject"] = [{"value": kw} for kw in data.keywords]
+    
+    if data.creation_date:
+        metadata["dc.date.created"] = [{"value": data.creation_date}]
+
+    return metadata
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +202,26 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         return _fmt_workspace(data)
 
     @mcp.tool()
+    def get_item_uuid_from_workspace_item(workspace_item_id: int) -> dict[str, Any]:
+        """
+        Get the UUID of an item from its workspace item ID.
+
+        Args:
+            workspace_item_id: Numeric ID of the workspace item.
+
+        Returns:
+            Dict with 'uuid' if found, or {'status': 'not_found'}.
+        """
+        try:
+            data = client.get(f"/api/submission/workspaceitems/{workspace_item_id}")
+            uuid = data.get("_links").get("item").get("href")
+            uuid = uuid.split("/")[-1]
+        except requests.HTTPError as exc:
+            return {"error": f"DSpace API error: {exc.response.status_code} — {exc.response.text}"}
+        return {"uuid": uuid}
+
+    # TODO: If update_workflow_item works with de structure schema, implement it here
+    @mcp.tool()
     def create_workspace_item(
         collection_uuid: str,
         title: str,
@@ -211,19 +271,11 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         """
         Update the metadata fields of a workspace item (draft) via PATCH.
 
-        DSpace 9 PATCH format: one 'add' operation per metadata field,
-        targeting the full field path within the section.
-        Example: path='/sections/traditionalpageone2/dc.title',
-                 value=[{"value": "Title", "language": null, "authority": null, "confidence": -1}]
-
-        Fetch the workspace item first to confirm the exact section name
-        (SEDICI uses 'traditionalpageone2' for the main metadata section).
-
         Args:
             workspace_item_id: Numeric ID of the workspace item.
             metadata: Dict of Dublin Core fields to update.
                       Format: {"dc.title": [{"value": "New title", "language": None,
-                                             "authority": None, "confidence": -1}],
+                                              "authority": None, "confidence": -1}],
                                "dc.contributor.author": [{"value": "Author"}]}
             section: Submission section to patch (default: 'traditionalpageone2').
 
@@ -349,6 +401,25 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
         return _fmt_workflow(data)
 
     @mcp.tool()
+    def get_item_uuid_from_workflow_item(workflow_item_id: int) -> dict[str, Any]:
+        """
+        Get the UUID of an item from its workflow item ID.
+
+        Args:
+            workflow_item_id: Numeric ID of the workflow item.
+
+        Returns:
+            Dict with 'uuid' if found, or {'status': 'not_found'}.
+        """
+        try:
+            data = client.get(f"/api/workflow/workflowitems/{workflow_item_id}")
+            uuid = data.get("_links").get("item").get("href")
+            uuid = uuid.split("/")[-1]
+        except requests.HTTPError as exc:
+            return {"error": f"DSpace API error: {exc.response.status_code} — {exc.response.text}"}
+        return {"uuid": uuid}
+
+    @mcp.tool()
     def get_workflow_item_by_item_uuid(item_uuid: str) -> dict[str, Any]:
         """
         Find the workflow item associated with a given item UUID.
@@ -370,6 +441,118 @@ def register(mcp: "FastMCP", client: "DSpaceClient") -> None:
                 return {"status": "not_found", "item_uuid": item_uuid}
             return {"error": f"DSpace API error: {exc.response.status_code} — {exc.response.text}"}
         return _fmt_workflow(data)
+
+    @mcp.tool()
+    def update_workflow_item(
+        workflow_item_id: int,
+        metadata: WorkspaceUpdateMetadataInput,
+    ) -> dict[str, Any]:
+        """
+        Updates the metadata of an item currently in review (WorkflowItem).
+
+        Args:
+            workflow_item_id: Numeric ID of the workflow item to update.
+            metadata: Structured input with optional fields: title, abstract,
+                      authors (list), keywords (list).
+
+        Returns:
+            Updated workflow item dict, or {'status': 'published'} if immediately
+            archived, or {'error': ...} describing which step failed.
+        """
+        # Step 1: get item UUID via HAL link
+        try:
+            wf_data = client.get(f"/api/workflow/workflowitems/{workflow_item_id}")
+        except requests.HTTPError as exc:
+            return {"error": f"Step 1 failed (GET workflow item): {exc.response.status_code} — {exc.response.text}"}
+        item_href = wf_data.get("_links", {}).get("item", {}).get("href", "")
+        if not item_href:
+            return {"error": f"Step 1 failed: _links.item.href missing from workflow item {workflow_item_id}."}
+        try:
+            item_data = client.get_full_url(item_href)
+        except requests.HTTPError as exc:
+            return {"error": f"Step 1 failed (GET item via HAL href {item_href}): {exc.response.status_code} — {exc.response.text}"}
+        item_uuid = item_data.get("uuid", "")
+        if not item_uuid:
+            return {"error": f"Step 1 failed: could not extract item UUID from workflow item {workflow_item_id}. Full item_data: {item_data}"}
+
+        # Step 2: return item to workspace
+        try:
+            client.delete(f"/api/workflow/workflowitems/{workflow_item_id}")
+        except requests.HTTPError as exc:
+            return {"error": f"Step 2 failed (DELETE workflow item): {exc.response.status_code} — {exc.response.text}"}
+
+        # Step 3: find workspace item by item UUID
+        search_params = {"uuid": item_uuid}
+        try:
+            ws_data = client.get(
+                "/api/submission/workspaceitems/search/item",
+                params=search_params,
+            )
+        except requests.HTTPError as exc:
+            return {"error": f"Step 3 failed (search workspace by UUID '{item_uuid}'): {exc.response.status_code} — {exc.response.text}"}
+        workspace_item_id = ws_data.get("id")
+        if workspace_item_id is None:
+            return {"error": f"Step 3 failed: workspace item not found for UUID '{item_uuid}'."}
+
+        # Step 4: detect form sections and build field→section map
+        ws_sections = ws_data.get("sections", {})
+        form_sections = []
+        for section_id in ws_sections:
+            try:
+                form_data = client.get(f"/api/config/submissionforms/{section_id}")
+                if "rows" in form_data:
+                    form_sections.append(section_id)
+            except requests.HTTPError:
+                pass
+        if not form_sections:
+            return {"error": "Step 4 failed: no form sections found in workspace item."}
+        field_map = {}
+        for section_id in form_sections:
+            try:
+                form_data = client.get(f"/api/config/submissionforms/{section_id}")
+                for row in form_data.get("rows", []):
+                    for field in row.get("fields", []):
+                        for sm in field.get("selectableMetadata", []):
+                            metadata_name = sm.get("metadata")
+                            if metadata_name:
+                                field_map[metadata_name] = section_id
+            except requests.HTTPError:
+                pass
+
+        # Step 5: PATCH workspace item with parsed metadata
+        dspace_metadata = parse_to_dspace_metadata(metadata)
+        if not dspace_metadata:
+            return {"error": "Step 5 failed: no metadata fields to update (all input fields were empty)."}
+        patch_ops = [
+            {
+                "op": "add",
+                "path": f"/sections/{field_map.get(field, form_sections[0])}/{field}",
+                "value": values,
+            }
+            for field, values in dspace_metadata.items()
+        ]
+
+        try:
+            client.patch(f"/api/submission/workspaceitems/{workspace_item_id}", json=patch_ops)
+        except requests.HTTPError as exc:
+            return {"error": f"Step 5 failed (PATCH workspace item {workspace_item_id}): {exc.response.status_code} — {exc.response.text}"}
+
+        # Step 6: re-submit to workflow
+        base_url = client.base_url.rstrip("/")
+        workspace_uri = f"{base_url}/api/submission/workspaceitems/{workspace_item_id}"
+        try:
+            new_wf = client.post_uri_list("/api/workflow/workflowitems", uri=workspace_uri)
+        except requests.HTTPError as exc:
+            return {"error": f"Step 6 failed (POST to workflow): {exc.response.status_code} — {exc.response.text}"}
+
+        if not new_wf:
+            return {
+                "status": "published",
+                "item_uuid": item_uuid,
+                "note": "Item was immediately archived (no workflow configured for this collection).",
+            }
+
+        return _fmt_workflow(new_wf)
 
     @mcp.tool()
     def delete_workflow_item(workflow_item_id: int, expunge: bool = False) -> dict[str, Any]:
