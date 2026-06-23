@@ -9,10 +9,9 @@ Usage::
     from core.utils.prompt_loader import load_agent_prompt
 
     prompt = load_agent_prompt("bots_agent")
-    # With dynamic substitutions (e.g. for github_agent):
-    prompt = load_agent_prompt("github_agent",
+    # With dynamic substitutions (e.g. for filesystem_agent):
+    prompt = load_agent_prompt("filesystem_agent",
                                WORKSPACE_PATH=config.WORKSPACE_PATH,
-                               DEFAULT_REPO=config.DEFAULT_GITHUB_REPO,
                                DOWNLOADS_DIR=config.DOWNLOADS_DIR)
 """
 

@@ -11,12 +11,12 @@ Sube un archivo que ya existe en el filesystem del host al almacenamiento de obj
 
 ## Prerequisito crítico
 
-El agente MinIO **solo puede leer archivos que estén dentro de `/Downloads`** (mapeado desde `DOWNLOADS_DIR` del host). Si el archivo no está ahí, el plan debe incluir un paso del agente `github` para moverlo primero.
+El agente MinIO **solo puede leer archivos que estén dentro de `/Downloads`** (mapeado desde `DOWNLOADS_DIR` del host). Si el archivo no está ahí, el plan debe incluir un paso del agente `filesystem` para moverlo primero.
 
 ## Flujo
 
 ```
-Paso 1 (github): Copiar o mover el archivo de origen a DOWNLOADS_DIR del host.
+Paso 1 (filesystem): Copiar o mover el archivo de origen a DOWNLOADS_DIR del host.
                  Confirmar que el archivo está allí usando list_directory o search_files.
                  NUNCA leer el contenido del archivo.
 
@@ -32,5 +32,5 @@ Paso 2 (minio):  Subir el archivo usando file_path=/Downloads/<nombre_del_archiv
 
 ## Notas
 
-- El agente `github` responde con "File [nombre] has been successfully copied to the shared downloads directory." cuando termina exitosamente.
+- El agente `filesystem` responde con "File [nombre] has been successfully copied to the shared downloads directory." cuando termina exitosamente.
 - Si el bucket destino no existe, agregar un paso previo con el agente `minio` para crearlo.

@@ -79,7 +79,7 @@ Tasks assigned to reviewers; executing these is the final step to publish an ite
 
 # Restrictions
 
-- The exported CSV path returned by `export_collection_csv` is a **container-internal path** (`/app/data/...`). Always communicate to subsequent agents that the **host-side equivalent** is `MCPs/Dspace MCP/data/<filename>.csv` (relative to the workspace root). The `github` agent can use this host path directly with its filesystem MCP tools.
-- Cannot directly access MinIO, the orchestrator host filesystem, GitHub, Bots, or OpenAlex.
+- The exported CSV path returned by `export_collection_csv` is a **container-internal path** (`/app/data/...`). Always communicate to subsequent agents that the **host-side equivalent** is `MCPs/Dspace MCP/data/<filename>.csv` (relative to the workspace root). The `filesystem_agent` can use this host path directly with its filesystem MCP tools.
+- Cannot directly access MinIO, the orchestrator host filesystem, Bots, or OpenAlex.
 - Do not guess UUIDs or numeric IDs. If an identifier is unknown, search for it first.
 - `reject_claimed_task` requires a non-empty `reason` string — never reject without providing a meaningful message for the submitter.

@@ -25,7 +25,7 @@ Cuando `export_collection_csv` retorna `csv_path: /app/data/<archivo>.csv`, el a
 {WORKSPACE_PATH}/MCPs/Dspace MCP/data/<archivo>.csv
 ```
 
-El agente `github` tiene acceso total a `{WORKSPACE_PATH}/*` con su MCP de filesystem, por lo que puede operar directamente sobre esa ruta. **No es necesario copiar desde un servidor remoto.**
+El agente `filesystem` tiene acceso total a `{WORKSPACE_PATH}/*` con su MCP de filesystem, por lo que puede operar directamente sobre esa ruta. **No es necesario copiar desde un servidor remoto.**
 
 ## Flujo
 
@@ -37,7 +37,7 @@ Paso 1 (dspace): Exportar la colección a CSV.
                  - Comunicar al siguiente agente que el path en el HOST es:
                    {WORKSPACE_PATH}/MCPs/Dspace MCP/data/<archivo>.csv
 
-Paso 2 (github): Mover o copiar el CSV al DOWNLOADS_DIR del host.
+Paso 2 (filesystem): Mover o copiar el CSV al DOWNLOADS_DIR del host.
                  - Path de origen: {WORKSPACE_PATH}/MCPs/Dspace MCP/data/<archivo>.csv
                  - Path de destino: {DOWNLOADS_DIR}/<archivo>.csv
                  - Usar move_file o copy_file del MCP de filesystem.

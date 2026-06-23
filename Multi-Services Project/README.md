@@ -43,7 +43,7 @@ Configure Studio to send the X-API-Key header with the token defined in your env
 
 **core/:** core code (agents, tools, authentication)
 
-**agent/:** agent implementations (bots, dspace, github, researcher)
+**agent/:** agent implementations (bots, dspace, filesystem, researcher)
 
 **tools/:** utilities and retrievers
 

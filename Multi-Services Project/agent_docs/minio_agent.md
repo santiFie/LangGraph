@@ -2,7 +2,7 @@
 minio_agent
 
 # description
-Agent that manages object storage in MinIO (S3-compatible). Operates through a Docker-based MCP server with a critical isolation constraint: its container only mounts `DOWNLOADS_DIR` as `/Downloads` internally. The agent can ONLY read or write files already inside `/Downloads`. Any file to be uploaded MUST first be placed in `DOWNLOADS_DIR` by the `github_agent` in a prior plan step, otherwise the operation will fail.
+Agent that manages object storage in MinIO (S3-compatible). Operates through a Docker-based MCP server with a critical isolation constraint: its container only mounts `DOWNLOADS_DIR` as `/Downloads` internally. The agent can ONLY read or write files already inside `/Downloads`. Any file to be uploaded MUST first be placed in `DOWNLOADS_DIR` by the `filesystem_agent` in a prior plan step, otherwise the operation will fail.
 
 Use this agent for listing buckets and objects, uploading files from `/Downloads/`, downloading objects to `/Downloads/`, deleting objects, and creating new buckets.
 

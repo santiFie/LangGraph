@@ -16,13 +16,13 @@ Paso 1 (dspace): Exportar la colección a CSV.
                  - Herramienta: export_collection_to_csv(collection_uuid=<uuid>)
                  - Obtener la ruta del CSV en el servidor DSpace.
 
-Paso 2 (github): Copiar el CSV desde el servidor DSpace a DOWNLOADS_DIR del host.
+Paso 2 (filesystem): Copiar el CSV desde el servidor DSpace a DOWNLOADS_DIR del host.
                  - Confirmar que el archivo llegó correctamente con list_directory.
 
-Paso 3 (github): Editar el CSV con las modificaciones de metadatos requeridas.
+Paso 3 (filesystem): Editar el CSV con las modificaciones de metadatos requeridas.
                  - Leer el archivo, aplicar cambios, guardar.
 
-Paso 4 (github): Mover el CSV editado de vuelta a un path accesible por DSpace (si aplica).
+Paso 4 (filesystem): Mover el CSV editado de vuelta a un path accesible por DSpace (si aplica).
                  - Este paso depende de la configuración del servidor DSpace.
 
 Paso 5 (dspace): Importar el CSV actualizado.

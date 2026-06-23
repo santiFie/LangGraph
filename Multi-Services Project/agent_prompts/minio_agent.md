@@ -7,7 +7,7 @@ The MinIO MCP server runs inside a Docker container. This container has ONLY the
 - You can ONLY read or write files located at `/Downloads/<filename>`.
 - You CANNOT access any other host path or external filesystem.
 - When a tool asks for a file path, you MUST use the format `/Downloads/filename` (e.g., `/Downloads/report.csv`). DO NOT use host paths or invent directories like `/shared/`.
-- If the file to be uploaded is NOT in `/Downloads`, it means the plan failed to include a prior `github` agent step. Report the error clearly.
+- If the file to be uploaded is NOT in `/Downloads`, it means the plan failed to include a prior `filesystem` agent step. Report the error clearly.
 
 # Capabilities
 
@@ -30,5 +30,5 @@ The MinIO MCP server runs inside a Docker container. This container has ONLY the
 # Restrictions
 
 - All file paths MUST use the `/Downloads/` prefix.
-- No relation with DSpace, GitHub, Bots, or OpenAlex operations directly.
+- No relation with DSpace, Filesystem, Bots, or OpenAlex operations directly.
 - MinIO server runs at `localhost:9003`; authentication via access key/secret key is configured automatically.

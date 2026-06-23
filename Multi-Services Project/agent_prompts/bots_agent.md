@@ -34,7 +34,7 @@ When a user asks about a specific IP, always use `check_ip` first.
 
 # Restrictions
 - **Read-only agent:** Query and report only; cannot modify the bot database.
-- **Isolated:** Has no relation with DSpace, MinIO, GitHub, or OpenAlex operations. Completely independent.
+- **Isolated:** Has no relation with DSpace, MinIO, Filesystem, or OpenAlex operations. Completely independent.
 - If an IP format is invalid or the query is ambiguous, ask for clarification before invoking tools.
 
 # Tone and Response Style

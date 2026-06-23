@@ -8,7 +8,7 @@ from langchain_groq import ChatGroq
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.graph import END, START, StateGraph
 from core.agent.bots_agent import build_bots_workflow
-from core.agent.github_agent import build_github_workflow
+from core.agent.filesystem_agent import build_filesystem_workflow
 from core.agent.researcher_agent import build_searcher_graph
 from core.agent.dspace_agent import build_dspace_agent_workflow
 from core.agent.minio_agent import build_minio_workflow
@@ -20,7 +20,7 @@ from core.utils.rag_context import retrieve_planner_context
 from core.utils.local_rag_context import retrieve_planner_context_local
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
-AgentName = Literal["github", "dspace", "minio", "bots", "searcher", "openalex"]
+AgentName = Literal["filesystem", "dspace", "minio", "bots", "searcher", "openalex"]
 
 class PlanStep(BaseModel):
     """One step in the plan."""
@@ -53,24 +53,14 @@ async def get_tools() -> dict[str, list[Any]]:
     )
 
     system_env = dict(os.environ)
-    github_env = {
-        **system_env,
-        "GITHUB_PERSONAL_ACCESS_TOKEN": config.GITHUB_PERSONAL_ACCESS_TOKEN or "",
-    }
 
-    github_client = MultiServerMCPClient(
+    filesystem_client = MultiServerMCPClient(
         {
             "filesystem": {
                 "command": "mcp-server-filesystem",
                 "args": [config.WORKSPACE_PATH],
                 "transport": "stdio",
                 "env": system_env,
-            },
-            "github": {
-                "command": "mcp-server-github",
-                "args": [],
-                "env": github_env,
-                "transport": "stdio",
             },
         }
     )
@@ -131,15 +121,13 @@ async def get_tools() -> dict[str, list[Any]]:
     )
 
     bot_tools = await bots_client.get_tools()
-    github_tools = await github_client.get_tools(server_name="github")
-    filesystem_tools = await github_client.get_tools(server_name="filesystem")
+    filesystem_tools = await filesystem_client.get_tools(server_name="filesystem")
     dspace_tools = await dspace_client.get_tools(server_name="DspaceMCP")
     minio_tools = await minio_client.get_tools(server_name="aistor")
     openalex_tools = await openalex_client.get_tools(server_name="openalex")
 
     tools = {
         "bots": bot_tools,
-        "github": github_tools,
         "filesystem": filesystem_tools,
         "dspace": dspace_tools,
         "minio": minio_tools,
@@ -161,7 +149,7 @@ async def create_supervisor_graph(persistence_saver):
         return build_searcher_graph()
 
     searcher_graph = _build_searcher_sync()
-    github_graph = await cast(Any, build_github_workflow(tools["github"] + tools["filesystem"]))
+    filesystem_graph = await cast(Any, build_filesystem_workflow(tools["filesystem"]))
     bots_graph = await build_bots_workflow(tools["bots"])
     dspace_graph = await build_dspace_agent_workflow(tools["dspace"])
     minio_graph = await build_minio_workflow(tools["minio"])
@@ -196,10 +184,9 @@ async def create_supervisor_graph(persistence_saver):
     - INPUT: task string — e.g. "List all permanently banned IPs", "Check if IP 1.2.3.4 is a bot".
     - OUTPUT: IP status, ban reasons, active timeframes, or paginated lists of banned IPs.
 
-    ### `github`
-    Specialized in GitHub remote operations and local filesystem management. Acts as the "file bridge"
-    It can: read, create, edit, move, list files on the local host filesystem; interact with GitHub
-    repositories (list repos, read/write remote files, create issues and PRs).
+    ### `filesystem`
+    Specialized in local filesystem operations. Acts as the "file bridge"
+    It can: read, create, edit, move, list files on the local host filesystem.
     NEVER interacts with MinIO, DSpace, or Bots directly.
     - INPUT: task string — e.g. "Copy file report.csv to {DOWNLOADS_DIR}", "List files in /data/".
     - OUTPUT: Confirmation of operation, file contents, directory listings, or error details.

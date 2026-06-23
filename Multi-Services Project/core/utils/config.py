@@ -54,9 +54,9 @@ class Config:
     
     # ==================== MCP SERVERS ====================
     # GitHub MCP
-    GITHUB_TOKEN: Optional[str] = os.getenv("GITHUB_TOKEN")
-    GITHUB_PERSONAL_ACCESS_TOKEN: Optional[str] = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
-    DEFAULT_GITHUB_REPO: str = os.getenv("DEFAULT_GITHUB_REPO", "santiFie/LangGraph")
+    #GITHUB_TOKEN: Optional[str] = os.getenv("GITHUB_TOKEN")
+    #GITHUB_PERSONAL_ACCESS_TOKEN: Optional[str] = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
+    #DEFAULT_GITHUB_REPO: str = os.getenv("DEFAULT_GITHUB_REPO", "santiFie/LangGraph")
     
     # Filesystem MCP
     WORKSPACE_PATH: str = os.getenv("WORKSPACE_PATH", "/home/santi/Documentos/LangGraph/")
@@ -96,7 +96,7 @@ class Config:
     
     # ==================== AGENTS ====================
     SEARCHER_MODEL: str = os.getenv("SEARCHER_MODEL", "llama-3.3-70b-versatile")
-    GITHUB_MODEL: str =  "gemini-3.1-flash-lite-preview"
+    FILESYSTEM_MODEL: str =  "gemini-3.1-flash-lite-preview"
     SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "llama-3.3-70b-versatile")
     BOTS_MODEL: str = "llama-3.3-70b-versatile"
     DSPACE_MODEL = "z-ai/glm-5.1"
