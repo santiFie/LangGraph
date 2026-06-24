@@ -7,6 +7,7 @@ System prompt is loaded at runtime from agent_prompts/bots_agent.md.
 
 import sys
 import os
+from core.utils.get_local_model import get_local_model_with_tools
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
@@ -23,40 +24,6 @@ class BotsAgentState(TypedDict):
     """State for the Bots agent"""
     messages: Annotated[list[BaseMessage], add_messages]
 
-async def get_bot_model_with_tools(bot_tools):
-    import httpx
-    import openai
-
-    orchestrator_api_key = config.ORCHESTRATOR_LOCAL_API_KEY
-
-    if not orchestrator_api_key:
-        raise RuntimeError("Missing ORCHESTRATOR_API_KEY_LOCAL environment variable")
-
-    auth_headers = {"X-API-Key": orchestrator_api_key}
-    timeout = 60.0
-
-    # HTTP sync client
-    sync_httpx_client = httpx.Client(headers=auth_headers, timeout=timeout)
-
-    # HTTP async client
-    async_httpx_client = httpx.AsyncClient(headers=auth_headers, timeout=timeout)
-    async_openai_client = openai.AsyncOpenAI(
-        base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
-        api_key="dummy",
-        http_client=async_httpx_client,
-    )
-
-    bot_model = ChatOpenAI(
-        model="qwen3:30b",
-        temperature=0,
-        base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
-        api_key="dummy",
-        http_client=sync_httpx_client,                  # used by .invoke()
-        async_client=async_openai_client.chat.completions, # used by .ainvoke()
-    ).bind_tools(tools=bot_tools)
-
-    return bot_model
-
 async def build_bots_workflow(bot_tools):
     """
     Builds the Bots agent graph
@@ -68,7 +35,7 @@ async def build_bots_workflow(bot_tools):
         Compiled Bots agent graph
     """
     bot_model = ChatGroq(model=config.BOTS_MODEL, temperature=0).bind_tools(tools=bot_tools)
-    #bot_model = await get_bot_model_with_tools(bot_tools)
+    #bot_model = await get_local_model_with_tools(bot_tools)
 
 
     async def bot_node(state: BotsAgentState):

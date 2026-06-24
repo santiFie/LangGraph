@@ -2,6 +2,7 @@ from typing import TypedDict, Annotated
 from langgraph.graph.message import add_messages
 from core.utils.config import Config
 from core.utils.prompt_loader import load_agent_prompt
+from core.utils.get_local_model import get_local_model, get_local_model_with_tools
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langgraph.graph import StateGraph, START, END
@@ -9,6 +10,8 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
 config = Config()
+
+USE_LOCAL_MODEL = True  # Boolean constant to decide which model to use for the DspaceAgent.
 
 class RouterOutput(BaseModel):
     """Tools selected by the router to be used in the current step."""
@@ -19,6 +22,17 @@ class RouterOutput(BaseModel):
 class DspaceAgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     tools_to_use: list[str] 
+
+async def _get_model():
+    if USE_LOCAL_MODEL:
+        model = await get_local_model()
+    else:
+        model = ChatNVIDIA(
+            model="meta/llama-4-maverick-17b-128e-instruct",
+            api_key = config.NVIDIA_API_KEY, 
+            temperature=0.1,
+        )
+    return model
 
 async def build_dspace_agent_workflow(tools):
     """Builds the DspaceAgent workflow"""
@@ -40,6 +54,7 @@ async def build_dspace_agent_workflow(tools):
         """)
 
         prompt = [sys_msg] + state["messages"]
+        
         model = ChatNVIDIA(
             model="meta/llama-4-maverick-17b-128e-instruct",
             api_key = config.NVIDIA_API_KEY, 
@@ -61,11 +76,8 @@ async def build_dspace_agent_workflow(tools):
             # Fallback
             filetered_tools = tools
 
-        dspace_model = ChatNVIDIA(
-            model=config.DSPACE_MODEL,
-            temperature=0.1,
-            top_p=0.9,    
-        ).bind_tools(tools=filetered_tools)
+        dspace_model = await _get_model()
+        dspace_model = dspace_model.bind_tools(tools=filetered_tools)
 
         sys_msg = SystemMessage(content=load_agent_prompt("dspace_agent"))
         prompt = [sys_msg] + state["messages"]

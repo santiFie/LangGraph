@@ -43,7 +43,8 @@ from core.utils.local_rag_context import retrieve_planner_context_local
 # Boolean constant to decide which RAG system to use.
 # - True: Uses local RAG API backend via `core/utils/local_rag_context.py`
 # - False: Uses local FAISS playbook retriever via `core/utils/rag_context.py`
-USE_LOCAL_RAG: bool = False
+USE_LOCAL_RAG: bool = True
+USE_LOCAL_MODEL: bool = True
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
 
@@ -84,6 +85,16 @@ class Plan(BaseModel):
 # ==============================================================================
 # SUPERVISOR GRAPH CREATOR
 # ==============================================================================
+
+# TODO: Add structured_output support for the local models
+async def _get_model():
+    """Returns the appropriate model instance based on the USE_LOCAL_MODEL flag."""
+    if USE_LOCAL_MODEL:
+        from core.utils.get_local_model import get_local_model
+        model = await get_local_model()
+    else:
+        model = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0)
+    return model
 
 async def create_supervisor_graph(persistence_saver=None):
     """
