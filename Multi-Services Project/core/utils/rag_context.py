@@ -33,7 +33,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
-from langchain_community.vectorstores.faiss import DistanceStrategy
+from langchain_community.vectorstores.utils import DistanceStrategy
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
@@ -107,16 +107,13 @@ def _load_playbook_chunks(docs_dir: Path) -> list[Document]:
             doc.metadata["doc_type"] = "playbook"
 
         all_docs.extend(char_splits)
-        logger.debug("Indexed %d chunks from %s", len(char_splits), md_file.name)
 
-    logger.info("Total playbook chunks indexed: %d", len(all_docs))
     return all_docs
 
 
 @lru_cache(maxsize=1)
 def _get_embeddings() -> HuggingFaceEmbeddings:
     """Build (and cache) the shared embedding model."""
-    logger.info("Loading embedding model: %s", EMBEDDING_MODEL)
     return HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL,
         model_kwargs={"device": "cpu"},
@@ -127,14 +124,12 @@ def _get_embeddings() -> HuggingFaceEmbeddings:
 @lru_cache(maxsize=1)
 def _build_playbook_vectorstore() -> FAISS:
     """Build and cache the FAISS index for workflow playbooks."""
-    logger.info("Building playbook vector store from: %s", PLAYBOOKS_DIR)
     docs  = _load_playbook_chunks(PLAYBOOKS_DIR)
     store = FAISS.from_documents(
         docs,
         _get_embeddings(),
         distance_strategy=DistanceStrategy.EUCLIDEAN_DISTANCE,
     )
-    logger.info("Playbook vector store ready (%d vectors).", store.index.ntotal)
     return store
 
 
@@ -156,7 +151,6 @@ def _select_top_playbooks(query: str) -> list[str]:
     candidates = store.similarity_search_with_score(query, k=CANDIDATE_K)
 
     if not candidates:
-        logger.warning("FAISS returned no candidates for query: %s", query[:80])
         return []
 
     # Aggregate: best (min) score per source document
@@ -168,14 +162,12 @@ def _select_top_playbooks(query: str) -> list[str]:
 
     # Sort by score (ascending = most relevant first)
     ranked = sorted(best_score.items(), key=lambda x: x[1])
-    logger.debug("Ranked playbooks: %s", ranked)
 
     # Apply optional threshold filter
     if SCORE_THRESHOLD is not None:
         ranked = [(src, s) for src, s in ranked if s <= SCORE_THRESHOLD]
 
     selected = [src for src, _ in ranked[:TOP_N_PLAYBOOKS]]
-    logger.info("Selected playbooks for injection: %s", selected)
     return selected
 
 
@@ -208,11 +200,9 @@ def retrieve_planner_context(query: str) -> str:
     try:
         selected_stems = _select_top_playbooks(query)
     except Exception as exc:
-        logger.error("Playbook RAG retrieval failed: %s", exc, exc_info=True)
         return ""
 
     if not selected_stems:
-        logger.warning("No relevant playbooks found for query: %s", query[:80])
         return ""
 
     playbook_docs: list[Document] = []

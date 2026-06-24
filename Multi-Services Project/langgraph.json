@@ -17,5 +17,12 @@
       "allow_credentials": true
     }
   },
-  "startup_timeout": 30
+  "startup_timeout": 30,
+  "store": {
+    "index": {
+      "embed": "core/store_embeddings.py:aembed_texts",
+      "dims": 384,
+      "fields": ["input", "plan", "past_steps", "response", "feeedback"]
+    }
+  }
 }

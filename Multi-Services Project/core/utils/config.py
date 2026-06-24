@@ -138,5 +138,6 @@ class Config:
         }
 
 
-# Instancia singleton
+# Singleton instance of Config
 config = Config()
+
