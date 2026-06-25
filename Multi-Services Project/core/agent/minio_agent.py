@@ -8,38 +8,26 @@ from langchain_groq import ChatGroq
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from core.utils.config import config
+from core.utils.get_local_model import get_local_model
 from core.utils.prompt_loader import load_agent_prompt
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
-
+USE_LOCAL_MODEL = False  # Boolean constant to decide which model to use for the MinioAgent.
 class MinioAgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
-def get_minio_model_with_tools(minio_tools):
-    import httpx
-
-    orchestrator_api_key = config.ORCHESTRATOR_LOCAL_API_KEY
-
-    if not orchestrator_api_key:
-        raise RuntimeError("Missing ORCHESTRATOR_API_KEY_LOCAL environment variable")
-
-    def create_custom_http_client():
-        """Cliente HTTP con autenticación via header X-API-Key"""
-        return httpx.Client(
-            headers={"X-API-Key": orchestrator_api_key},
-            timeout=60.0,
+async def _get_model():
+    """Returns the appropriate model instance based on the USE_LOCAL_MODEL flag."""
+    if USE_LOCAL_MODEL:
+        model = await get_local_model()
+    else:
+        model = ChatOpenAI(
+            model=config.MINIO_MODEL,
+            api_key=config.OPEN_ROUTER_API_KEY,
+            base_url=config.OPEN_ROUTER_BASE_URL,
+            temperature=0,
         )
-    
-    minio_model = ChatOpenAI(
-        model="qwen3:30b", 
-        temperature=0,
-        base_url=config.ORCHESTRATOR_BASE_URL_LOCAL,
-        api_key="dummy",  # Not used, apy key is sent via custom header 
-        http_client=create_custom_http_client(),
-    ).bind_tools(tools=minio_tools)    
-
-    return minio_model
-
+    return model
 
 @tool
 def get_host_downloads_dir() -> str:
@@ -49,7 +37,8 @@ def get_host_downloads_dir() -> str:
 async def build_minio_workflow(tools):
 
     tools.append(get_host_downloads_dir)
-    minio_model = ChatGroq(model=config.MINIO_MODEL, temperature=0).bind_tools(tools=tools)
+    minio_model = await _get_model()
+    minio_model = minio_model.bind_tools(tools=tools)  
     #minio_model = get_minio_model_with_tools(tools)
 
     async def minio_node(state):
