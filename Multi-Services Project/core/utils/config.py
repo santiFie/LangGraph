@@ -81,6 +81,10 @@ class Config:
     ORCHESTRATOR_LOCAL_API_KEY: str = os.getenv("ORCHESTRATOR_LOCAL_API_KEY", "")
     ORCHESTRATOR_BASE_URL_LOCAL: str = os.getenv("ORCHESTRATOR_BASE_URL_LOCAL", "")
 
+    # ==================== OPEN ROUTER ====================
+    OPEN_ROUTER_API_KEY: str = os.getenv("OPEN_ROUTER_API_KEY", "")
+    OPEN_ROUTER_BASE_URL: str = os.getenv("OPEN_ROUTER_BASE_URL", "")
+
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")
     CHECKPOINT_DB: str = os.getenv("CHECKPOINT_DB", "checkpoint.db")
@@ -100,8 +104,9 @@ class Config:
     SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "llama-3.3-70b-versatile")
     BOTS_MODEL: str = "llama-3.3-70b-versatile"
     DSPACE_MODEL = "z-ai/glm-5.1"
-    MINIO_MODEL = "openai/gpt-oss-120b"
+    # MINIO_MODEL = "openai/gpt-oss-120b"
     # OPENALEX_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+    MINIO_MODEL = "nvidia/nemotron-nano-9b-v2:free"
     OPENALEX_MODEL = "openai/gpt-oss-120b"
 
     # ==================== MINIO CONFIG ====================
