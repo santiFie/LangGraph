@@ -3,11 +3,13 @@ from .bots_agent import build_bots_workflow
 from .filesystem_agent import build_filesystem_workflow
 from .dspace_agent import build_dspace_agent_workflow
 from .minio_agent import build_minio_workflow
+from .sedici_agent import build_sedici_agent_workflow
 
 __all__ = [
     "build_searcher_graph",
     "build_bots_workflow", 
     "build_filesystem_workflow",
     "build_dspace_agent_workflow",
-    "build_minio_workflow"
+    "build_minio_workflow",
+    "build_sedici_agent_workflow"
 ]

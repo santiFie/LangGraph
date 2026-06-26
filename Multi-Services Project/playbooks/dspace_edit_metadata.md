@@ -12,7 +12,7 @@ Exporta metadatos de una colección DSpace a CSV, los edita localmente, y los re
 ## Flujo
 
 ```
-Paso 1 (dspace): Exportar la colección a CSV.
+Paso 1 (sedici): Exportar la colección a CSV.
                  - Herramienta: export_collection_to_csv(collection_uuid=<uuid>)
                  - Obtener la ruta del CSV en el servidor DSpace.
 
@@ -25,7 +25,7 @@ Paso 3 (filesystem): Editar el CSV con las modificaciones de metadatos requerida
 Paso 4 (filesystem): Mover el CSV editado de vuelta a un path accesible por DSpace (si aplica).
                  - Este paso depende de la configuración del servidor DSpace.
 
-Paso 5 (dspace): Importar el CSV actualizado.
+Paso 5 (sedici): Importar el CSV actualizado.
                  - Herramienta: import_metadata_from_csv con la ruta del CSV modificado.
 ```
 

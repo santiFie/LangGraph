@@ -25,7 +25,7 @@ from langgraph.store.base import BaseStore
 from core.agent.bots_agent import build_bots_workflow
 from core.agent.filesystem_agent import build_filesystem_workflow
 from core.agent.researcher_agent import build_searcher_graph
-from core.agent.dspace_agent import build_dspace_agent_workflow
+from core.agent.sedici_agent import build_sedici_agent_workflow
 from core.agent.minio_agent import build_minio_workflow
 from core.agent.openalex_agent import build_openalex_workflow
 
@@ -43,8 +43,13 @@ from core.utils.local_rag_context import retrieve_planner_context_local
 # Boolean constant to decide which RAG system to use.
 # - True: Uses local RAG API backend via `core/utils/local_rag_context.py`
 # - False: Uses local FAISS playbook retriever via `core/utils/rag_context.py`
-USE_LOCAL_RAG: bool = True
-USE_LOCAL_MODEL: bool = True
+USE_LOCAL_RAG: bool = False
+USE_LOCAL_MODEL: bool = False
+
+# Episodic memory retrieval — relevance threshold for similarity scores.
+# Memories with cosine-similarity score below this value are filtered out
+# to avoid injecting irrelevant past experiences into the planner.
+MEMORY_SCORE_THRESHOLD: float = 0.5
 
 DOWNLOADS_DIR = config.DOWNLOADS_DIR
 
@@ -52,7 +57,7 @@ DOWNLOADS_DIR = config.DOWNLOADS_DIR
 # TYPE DEFINITIONS & SCHEMAS
 # ==============================================================================
 
-AgentName = Literal["filesystem", "dspace", "minio", "bots", "searcher", "openalex"]
+AgentName = Literal["filesystem", "sedici", "minio", "bots", "searcher", "openalex"]
 
 
 class PlanStep(BaseModel):
@@ -107,7 +112,7 @@ async def create_supervisor_graph(persistence_saver=None):
     searcher_graph = build_searcher_graph()
     filesystem_graph = await cast(Any, build_filesystem_workflow(tools["filesystem"]))
     bots_graph = await build_bots_workflow(tools["bots"])
-    dspace_graph = await build_dspace_agent_workflow(tools["dspace"])
+    sedici_graph = await build_sedici_agent_workflow(tools["dspace"], tools["database"])
     minio_graph = await build_minio_workflow(tools["minio"])
     openalex_graph = await build_openalex_workflow(tools["openalex"])
 
@@ -141,12 +146,23 @@ async def create_supervisor_graph(persistence_saver=None):
         return retrieve_planner_context(query)
 
     async def _retrieve_episodic_memory(query: str, store: BaseStore) -> str:
-        """Retrieve past successful workflows from episodic memory."""
+        """Retrieve past successful workflows from episodic memory.
+
+        Filters results by ``MEMORY_SCORE_THRESHOLD`` to avoid injecting
+        irrelevant past experiences into the planner.
+        """
         try:
-            memories = await store.asearch(("episodes",), query=query, limit=2)
-            if not memories:
+            results = await store.asearch(("episodes",), query=query, limit=4)
+            if not results:
                 return ""
-            return _format_memories(memories)
+
+            # Filter by relevance score and keep top-2
+            scored = [(m, getattr(m, "score", 0) or 0) for m in results]
+            relevant = [m for m, s in scored if s >= MEMORY_SCORE_THRESHOLD]
+            if not relevant:
+                return ""
+
+            return _format_memories(relevant[:2])
         except Exception:
             logging.warning("Failed to read episodic memory", exc_info=True)
             return ""
@@ -354,7 +370,7 @@ async def create_supervisor_graph(persistence_saver=None):
     workflow.add_node("searcher", create_agent_node(searcher_graph))
     workflow.add_node("filesystem", create_agent_node(filesystem_graph))
     workflow.add_node("bots", create_agent_node(bots_graph))
-    workflow.add_node("dspace", create_agent_node(dspace_graph))
+    workflow.add_node("sedici", create_agent_node(sedici_graph))
     workflow.add_node("minio", create_agent_node(minio_graph))
     workflow.add_node("openalex", create_agent_node(openalex_graph))
     workflow.add_node("human_feedback", human_feedback_node)
@@ -368,13 +384,13 @@ async def create_supervisor_graph(persistence_saver=None):
         "searcher": "searcher",
         "filesystem": "filesystem",
         "bots": "bots",
-        "dspace": "dspace",
+        "sedici": "sedici",
         "minio": "minio",
         "openalex": "openalex",
         "replanner": "replanner"
     })
 
-    for agent in ["searcher", "filesystem", "bots", "dspace", "minio", "openalex"]:
+    for agent in ["searcher", "filesystem", "bots", "sedici", "minio", "openalex"]:
         workflow.add_edge(agent, "replanner")
 
     workflow.add_conditional_edges(
@@ -384,7 +400,7 @@ async def create_supervisor_graph(persistence_saver=None):
             "searcher": "searcher",
             "filesystem": "filesystem",
             "bots": "bots",
-            "dspace": "dspace",
+            "sedici": "sedici",
             "minio": "minio",
             "openalex": "openalex",
             "final_answer_node": "final_answer_node"

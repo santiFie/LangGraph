@@ -1,8 +1,7 @@
 # name
 dspace_agent
 
-# description
-Agent that administrates SEDICI, the institutional repository based on DSpace 7+. Connects via MCP to the DSpace REST API to search, create, and update communities, collections, items, and manage bitstreams. Handles metadata export to CSV (asynchronous, result stored on DSpace server) and import from CSV. All objects are identified by UUIDs; if the user provides a name, the agent resolves it to UUID automatically.
+Agent that administrates SEDICI, the institutional repository based on DSpace 7+. Connects via MCP to the DSpace REST API to create and update communities, collections, items, and manage bitstreams. Handles metadata export to CSV (asynchronous, result stored on DSpace server) and import from CSV. All objects are identified by UUIDs. Important: This agent DOES NOT resolve names to UUIDs or perform metadata/author lookups; those tasks are strictly handled by the database agent.
 
 A critical constraint: exported CSV files reside on the internal DSpace server filesystem. To share them with other agents (e.g., `minio_agent`), the `filesystem_agent` must first copy the file to the shared `DOWNLOADS_DIR`.
 

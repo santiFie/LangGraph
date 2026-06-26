@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 config = Config()
 
-USE_LOCAL_MODEL = True  # Boolean constant to decide which model to use for the DspaceAgent.
+USE_LOCAL_MODEL = False  # Boolean constant to decide which model to use for the DspaceAgent.
 
 class RouterOutput(BaseModel):
     """Tools selected by the router to be used in the current step."""
@@ -28,7 +28,7 @@ async def _get_model():
         model = await get_local_model()
     else:
         model = ChatNVIDIA(
-            model="meta/llama-4-maverick-17b-128e-instruct",
+            model=config.DSPACE_MODEL,
             api_key = config.NVIDIA_API_KEY, 
             temperature=0.1,
         )
@@ -50,11 +50,13 @@ async def build_dspace_agent_workflow(tools):
             When you receive a message, determine which tool(s) are needed to respond to the user's request.
             Return a list of tool names that should be invoked, in the order they should be invoked.
             Only include the tools that are necessary to fulfill the user's request. If multiple tools are needed, list them in the order they should be called.
-            If you cannot determine any relevant tool from the message, return an empty list.   
+            If you cannot determine any relevant tool from the message, return an empty list.
+            
+            IMPORTANT: DO NOT select tools for tasks that can be fulfilled by the database, such as resolving names to UUIDs, metadata lookups, author searches, or statistics. For such tasks, return an empty list.
         """)
 
         prompt = [sys_msg] + state["messages"]
-        
+
         model = ChatNVIDIA(
             model="meta/llama-4-maverick-17b-128e-instruct",
             api_key = config.NVIDIA_API_KEY, 

@@ -30,14 +30,14 @@ El agente `filesystem` tiene acceso total a `{WORKSPACE_PATH}/*` con su MCP de f
 ## Flujo
 
 ```
-Paso 1 (dspace): Exportar la colección a CSV.
+Paso 1 (sedici): Exportar la colección a CSV.
                  - Si no se conoce el UUID, buscarlo primero con list_collections o search_collections.
                  - Herramienta: export_collection_csv(collection_uuid=<uuid>)
                  - El tool retorna csv_path=/app/data/<archivo>.csv (ruta interna del contenedor).
                  - Comunicar al siguiente agente que el path en el HOST es:
                    {WORKSPACE_PATH}/MCPs/Dspace MCP/data/<archivo>.csv
 
-Paso 2 (filesystem): Mover o copiar el CSV al DOWNLOADS_DIR del host.
+Paso 2 (sedici): Mover o copiar el CSV al DOWNLOADS_DIR del host.
                  - Path de origen: {WORKSPACE_PATH}/MCPs/Dspace MCP/data/<archivo>.csv
                  - Path de destino: {DOWNLOADS_DIR}/<archivo>.csv
                  - Usar move_file o copy_file del MCP de filesystem.

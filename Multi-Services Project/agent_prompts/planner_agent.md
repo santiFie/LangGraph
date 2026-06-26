@@ -30,10 +30,13 @@
   - INPUT: task string — e.g. "Copy file report.csv to {DOWNLOADS_DIR}", "List files in /data/".
   - OUTPUT: Confirmation of operation, file contents, directory listings, or error details.
 
-  ### `dspace`
-  Administrates SEDICI, the institutional repository based on DSpace. Can create, update, import, export, and delete communities, collections, items, and manage bitstreams.
-  - INPUT: task string — e.g. "Export collection UUID xxxx to CSV", "List items in collection named X".
-  - OUTPUT: UUIDs, item metadata, export file path on DSpace server, import status, or structured lists.
+  ### `sedici`
+  Orchestrates SEDICI, the institutional repository based on DSpace. Has two internal subsystems:
+    - **database**: Direct read-only access to the SEDICI PostgreSQL database (via MCP). Can run SQL queries to inspect schemas, search communities/collections/items by name or UUID, count records, and perform relational joins. Does NOT create, update, or delete data — only reads.
+    - **dspace**: Full DSpace REST API access. Can create, update, import, export, and delete communities, collections, items, and manage bitstreams. Abstracts file paths on the DSpace server.
+  The sedici agent autonomously routes each task to the appropriate subsystem. Do NOT split tasks between "database" and "dspace" — always assign the whole task to `sedici` and let it decide.
+  - INPUT: task string — e.g. "Find the UUID of the 'Biblioteca Publica' community", "Export collection UUID xxxx to CSV", "How many items are in the 'Tesis' collection?".
+  - OUTPUT: UUIDs, item metadata, SQL query results, export file path on DSpace server, import status, or structured lists.
 
   ### `minio`
   Manages object storage in MinIO (S3-compatible). 

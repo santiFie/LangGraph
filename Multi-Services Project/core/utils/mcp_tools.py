@@ -91,17 +91,35 @@ async def get_tools() -> dict[str, list[Any]]:
         }
     )
 
+    # 6. Database MCP Client (Stdio / Docker)
+    database_client = MultiServerMCPClient(
+    {
+        "postgresql": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@modelcontextprotocol/server-postgres",
+                f"postgresql://{config.DB_USER}:{config.DB_PASSWORD}@{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}",
+            ],
+            "transport": "stdio",
+            "env": system_env,
+        }
+    }
+)
+
     # Fetch tools concurrently
     bot_tools = await bots_client.get_tools()
     filesystem_tools = await filesystem_client.get_tools(server_name="filesystem")
     dspace_tools = await dspace_client.get_tools(server_name="DspaceMCP")
     minio_tools = await minio_client.get_tools(server_name="aistor")
     openalex_tools = await openalex_client.get_tools(server_name="openalex")
+    database_tools = await database_client.get_tools(server_name="postgresql")
 
     return {
         "bots": bot_tools,
         "filesystem": filesystem_tools,
         "dspace": dspace_tools,
+        "database": database_tools,
         "minio": minio_tools,
         "openalex": openalex_tools
     }

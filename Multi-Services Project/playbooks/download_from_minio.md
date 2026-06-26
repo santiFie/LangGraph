@@ -17,7 +17,7 @@ Paso 1 (minio):  Descargar el objeto del bucket.
                    que corresponde a DOWNLOADS_DIR del host.
                  - Si no se conoce el nombre exacto del objeto, primero listar con list_objects.
 
-Paso 2 (filesystem_agent): [Opcional] Mover o copiar el archivo desde DOWNLOADS_DIR
+Paso 2 (filesystem): [Opcional] Mover o copiar el archivo desde DOWNLOADS_DIR
                  a otra ubicación del host si es necesario para procesamiento posterior.
 ```
 

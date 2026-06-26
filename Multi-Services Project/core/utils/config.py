@@ -88,6 +88,11 @@ class Config:
     # ==================== DATABASE ====================
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./checkpoint.db")
     CHECKPOINT_DB: str = os.getenv("CHECKPOINT_DB", "checkpoint.db")
+    DB_HOST: str = os.getenv("DB_HOST", "")
+    DB_PORT: int = int(os.getenv("DB_PORT", ""))
+    DB_USER: str = os.getenv("DB_USER", "")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
+    DB_NAME: str = os.getenv("DB_NAME", "")
     
     # ==================== SERVER ====================
     SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")
@@ -102,8 +107,11 @@ class Config:
     SEARCHER_MODEL: str = os.getenv("SEARCHER_MODEL", "llama-3.3-70b-versatile")
     FILESYSTEM_MODEL: str =  "gemini-3.1-flash-lite-preview"
     SUPERVISOR_MODEL: str = os.getenv("SUPERVISOR_MODEL", "llama-3.3-70b-versatile")
+    DATABASE_MODEL: str = os.getenv("DATABASE_MODEL", "openai/gpt-oss-120b")
     BOTS_MODEL: str = "llama-3.3-70b-versatile"
     DSPACE_MODEL = "z-ai/glm-5.1"
+    #SEDICI_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    SEDICI_MODEL = "nvidia/nemotron-nano-9b-v2:free"
     # MINIO_MODEL = "openai/gpt-oss-120b"
     # OPENALEX_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
     MINIO_MODEL = "nvidia/nemotron-nano-9b-v2:free"
