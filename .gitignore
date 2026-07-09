@@ -1,8 +1,16 @@
 # RAG Data
 Multi-Services Router/rag_pdfs/*
 
+#VS Code
+Multi-Services Project/.vscode/*
+
 # Agents
 Multi-Services Project/.agents/*
+Multi-Services Project/GEMINI.md
+Multi-Services Project/.opencode/*
+
+# Modulo Marta
+Modulo-Marta/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
