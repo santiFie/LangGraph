@@ -58,7 +58,6 @@ async def build_database_workflow(database_tools):
         prompt = [sys_msg] + state["messages"]
         response = await model.ainvoke(prompt)
 
-        # Normalize response to AIMessage format for consistent state updates
         if isinstance(response, dict):
             content = response.get("content") or response.get("text") or str(response)
             response_msg = AIMessage(content=content)

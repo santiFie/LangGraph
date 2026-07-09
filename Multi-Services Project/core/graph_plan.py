@@ -91,7 +91,6 @@ class Plan(BaseModel):
 # SUPERVISOR GRAPH CREATOR
 # ==============================================================================
 
-# TODO: Add structured_output support for the local models
 async def _get_model():
     """Returns the appropriate model instance based on the USE_LOCAL_MODEL flag."""
     if USE_LOCAL_MODEL:
@@ -116,7 +115,7 @@ async def create_supervisor_graph(persistence_saver=None):
     minio_graph = await build_minio_workflow(tools["minio"])
     openalex_graph = await build_openalex_workflow(tools["openalex"])
 
-    planner_llm = ChatGroq(model=config.SUPERVISOR_MODEL, temperature=0)
+    planner_llm = await _get_model()
 
     # 2. Prompts
     planner_system_prompt = SystemMessage(content=load_agent_prompt("planner_agent"))
